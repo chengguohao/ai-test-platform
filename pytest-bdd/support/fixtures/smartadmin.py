@@ -51,8 +51,8 @@ SA_UNAUTHORIZED_CODES: list[int] = []
 #   reporter(填报员) : 新增/修改所负责的数据、只读其余
 #   auditor(审核员)  : 只读 + 审核阶段，不可修改数据
 #   employee(员工)   : 员工端，仅可见/查看对全员可见的公告
-SA_ROLE_KEYS: tuple[str, ...] = ("admin", "reporter", "auditor", "employee")
-SA_ROLE_CN: dict[str, str] = {"admin": "管理员", "reporter": "填报员", "auditor": "审核员", "employee": "员工"}
+SA_ROLE_KEYS: tuple[str, ...] = ("admin", "reporter", "auditor", "employee", "manager", "hr_admin")
+SA_ROLE_CN: dict[str, str] = {"admin": "管理员", "reporter": "填报员", "auditor": "审核员", "employee": "员工", "manager": "主管", "hr_admin": "人事专员"}
 
 # 角色会话池：role_key -> ApiClient（懒登录缓存，每角色独立 token）
 SA_ROLE_CLIENTS: dict[str, ApiClient] = {}

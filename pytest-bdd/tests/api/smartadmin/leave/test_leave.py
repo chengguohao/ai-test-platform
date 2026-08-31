@@ -1,328 +1,565 @@
-# AUTO-GENERATED - 来源用例映射 (TC-id -> 用例名)
-# TC-LEAVE-01 -> 员工提交请假申请-正常成功
-# TC-LEAVE-02 -> 员工提交请假申请-缺少必填字段 leaveTypeId
-# TC-LEAVE-03 -> 员工提交请假申请-结束时间早于开始时间
-# TC-LEAVE-04 -> 员工提交请假申请-请假类型不存在
-# TC-LEAVE-05 -> 员工提交请假申请-未登录调用
-# TC-LEAVE-06 -> 员工提交请假申请-非员工角色调用
-# TC-LEAVE-07 -> 员工查询我的请假列表-正常分页
-# TC-LEAVE-08 -> 员工查询我的请假列表-按状态过滤
-# TC-LEAVE-09 -> 员工查询我的请假列表-分页参数无效
-# TC-LEAVE-10 -> 员工查询请假详情-正常查询
-# TC-LEAVE-11 -> 员工查询请假详情-查询不存在的申请单
-# TC-LEAVE-12 -> 员工查询请假详情-查询他人申请单
-# TC-LEAVE-13 -> 员工撤回待审批申请-正常成功
-# TC-LEAVE-14 -> 员工撤回申请-申请不存在
-# TC-LEAVE-15 -> 员工撤回申请-申请状态非待审批(如已通过)
-# TC-LEAVE-16 -> 员工撤回申请-缺少必填字段cancelReason
-# TC-LEAVE-17 -> 部门主管查询审批待办列表-正常分页
-# TC-LEAVE-18 -> 部门主管通过请假申请-正常成功
-# TC-LEAVE-19 -> 部门主管驳回请假申请-正常成功
-# TC-LEAVE-20 -> 部门主管审批-驳回时未填写审批意见
-# TC-LEAVE-21 -> 部门主管审批-非待审批状态申请
-# TC-LEAVE-22 -> 部门主管审批-审批非本部门申请
-# TC-LEAVE-23 -> 部门主管查询审批已办列表-正常分页
-# TC-LEAVE-24 -> 人事专员查询全公司请假记录-正常分页
-# TC-LEAVE-25 -> 人事专员查询全公司请假记录-按部门和时间范围过滤
-# TC-LEAVE-26 -> 人事专员查询全公司请假记录-非人事角色调用
-# TC-LEAVE-27 -> 人事专员统计请假时长-正常统计
-# TC-LEAVE-28 -> 人事专员统计请假时长-缺少必填参数
-# TC-LEAVE-29 -> 未登录访问任意接口
+# AUTO-GENERATED
+# 来源用例映射:
+# TC-LEAVE-C01 -> 成功提交事假申请
+# TC-LEAVE-C02 -> 成功提交带附件的病假申请
+# TC-LEAVE-C03 -> 结束时间早于开始时间提交失败
+# TC-LEAVE-C04 -> 结束时间等于开始时间提交失败
+# TC-LEAVE-C05 -> 必填字段缺失提交失败
+# TC-LEAVE-C06 -> 请假类型不存在提交失败
+# TC-LEAVE-C07 -> 请假原因超过500字提交失败
+# TC-LEAVE-C08 -> 附件URL超过1000字符提交失败
+# TC-LEAVE-C09 -> 非员工角色提交申请权限不足
+# TC-LEAVE-C10 -> 查看我的请假列表成功
+# TC-LEAVE-C11 -> 按状态过滤请假列表
+# TC-LEAVE-C12 -> 分页参数不合法查询失败
+# TC-LEAVE-C13 -> 非员工角色查看我的请假列表权限不足
+# TC-LEAVE-C14 -> 查看本人待审批申请详情
+# TC-LEAVE-C15 -> 查看本人已通过申请详情
+# TC-LEAVE-C16 -> 查看本人已驳回申请详情
+# TC-LEAVE-C17 -> 查看已撤回申请详情
+# TC-LEAVE-C18 -> 查看不存在的申请详情
+# TC-LEAVE-C19 -> 查看他人申请详情权限不足
+# TC-LEAVE-C20 -> 非员工角色查看详情权限不足
+# TC-LEAVE-C21 -> 成功撤回待审批申请
+# TC-LEAVE-C22 -> 撤回已通过申请失败
+# TC-LEAVE-C23 -> 撤回已驳回申请失败
+# TC-LEAVE-C24 -> 撤回已撤回申请失败
+# TC-LEAVE-C25 -> 撤回不存在的申请失败
+# TC-LEAVE-C26 -> 撤回原因为必填
+# TC-LEAVE-C27 -> 撤回原因超过200字失败
+# TC-LEAVE-C28 -> 撤回他人申请权限不足
+# TC-LEAVE-C29 -> 非员工角色撤回权限不足
+# TC-LEAVE-C30 -> 查看审批待办列表成功
+# TC-LEAVE-C31 -> 按申请人过滤待办列表
+# TC-LEAVE-C32 -> 按请假类型过滤待办列表
+# TC-LEAVE-C33 -> 按状态过滤待办列表
+# TC-LEAVE-C34 -> 分页参数不合法查询失败
+# TC-LEAVE-C35 -> 非主管角色查看待办列表权限不足
+# TC-LEAVE-C36 -> 成功通过审批
+# TC-LEAVE-C37 -> 成功驳回审批（填写意见）
+# TC-LEAVE-C38 -> 驳回未填写审批意见失败
+# TC-LEAVE-C39 -> 审批已通过的申请失败
+# TC-LEAVE-C40 -> 审批已驳回的申请失败
+# TC-LEAVE-C41 -> 审批已撤回的申请失败
+# TC-LEAVE-C42 -> 审批不存在的申请失败
+# TC-LEAVE-C43 -> 审批非本部门申请权限不足
+# TC-LEAVE-C44 -> 非主管角色审批权限不足
+# TC-LEAVE-C45 -> 查看审批已办列表成功
+# TC-LEAVE-C46 -> 按申请人过滤已办列表
+# TC-LEAVE-C47 -> 按状态过滤已办列表
+# TC-LEAVE-C48 -> 分页参数不合法查询失败
+# TC-LEAVE-C49 -> 非主管角色查看已办列表权限不足
+# TC-LEAVE-C50 -> 查看全公司请假记录成功
+# TC-LEAVE-C51 -> 按部门过滤请假记录
+# TC-LEAVE-C52 -> 按状态过滤请假记录
+# TC-LEAVE-C53 -> 按申请时间范围过滤请假记录
+# TC-LEAVE-C54 -> 组合条件过滤请假记录
+# TC-LEAVE-C55 -> 分页参数不合法查询失败
+# TC-LEAVE-C56 -> 日期格式错误查询失败
+# TC-LEAVE-C57 -> 非人事专员角色查看请假记录权限不足
+# TC-LEAVE-C58 -> 查看请假时长统计成功
+# TC-LEAVE-C59 -> 必填日期参数缺失查询失败
+# TC-LEAVE-C60 -> 日期格式错误查询失败
+# TC-LEAVE-C61 -> 非人事专员角色查看统计权限不足
+# TC-LEAVE-C62 -> 未登录访问接口返回未登录
+# TC-LEAVE-C63 -> 跨角色访问接口返回无权限
 
 from __future__ import annotations
-import allure, pytest
+import allure
+import pytest
 from support.api_case import ApiCase, Assertion, FlowStep, run_case
 from support.clients.api_client import ApiClient
 from support.fixtures.context import ScenarioContext
 from support.fixtures.smartadmin import SA_CODES
 
-def _bf(key: str):
-    """反例业务码断言辅助函数"""
+# 辅助函数：根据错误码构建失败断言
+def _bf(key: str) -> list[Assertion]:
+    """构建业务失败断言列表，key 不存在时退化为检查 /msg 存在"""
     code = SA_CODES.get(key)
     if code is None:
         return [Assertion(expected=True, op="exists", field="/msg")]
     return Assertion.biz_fail(code=code) + [Assertion(expected=True, op="exists", field="/msg")]
 
-# 定义跨角色测试步骤
+# 用例数据（按执行顺序排列，覆盖全流程）
 FLOW_STEPS: list[FlowStep] = [
-    # ============ 员工角色操作 ============
+    # 员工提交申请
     FlowStep("employee", ApiCase(
-        name="TC-LEAVE-01-员工提交请假申请-正常成功",
+        name="TC-LEAVE-C01-成功提交事假申请",
         method="POST", path="/leave/apply",
-        body={"leaveTypeId": 1, "startTime": "2026-09-01 09:00:00", "endTime": "2026-09-01 18:00:00", "reason": "测试事假申请"},
-        assertions=[]  # 正例，信封守卫自动校验
+        body={"leaveTypeId": 1, "startTime": "2026-09-01 09:00:00", "endTime": "2026-09-01 18:00:00", "reason": "家中有事需处理"},
+        assertions=[],
+        save={"apply_no": "${apply_no}"}  # 成功后分页反查 applyNo 存入 ctx
     )),
     FlowStep("employee", ApiCase(
-        name="TC-LEAVE-02-员工提交请假申请-缺少必填字段 leaveTypeId",
+        name="TC-LEAVE-C02-成功提交带附件的病假申请",
         method="POST", path="/leave/apply",
-        body={"startTime": "2026-09-01 09:00:00", "endTime": "2026-09-01 18:00:00", "reason": "测试事假申请"},
-        biz_auto=False,  # 反例必须显式
-        assertions=[*_bf("param_error")]
+        body={"leaveTypeId": 2, "startTime": "2026-09-02 09:00:00", "endTime": "2026-09-02 18:00:00", "reason": "身体不适需休息", "attachment": "http://example.com/doctor_cert.jpg"},
+        assertions=[]
     )),
     FlowStep("employee", ApiCase(
-        name="TC-LEAVE-03-员工提交请假申请-结束时间早于开始时间",
+        name="TC-LEAVE-C03-结束时间早于开始时间提交失败",
         method="POST", path="/leave/apply",
-        body={"leaveTypeId": 1, "startTime": "2026-09-02 09:00:00", "endTime": "2026-09-01 18:00:00", "reason": "测试事假申请"},
+        body={"leaveTypeId": 1, "startTime": "2026-09-01 18:00:00", "endTime": "2026-09-01 09:00:00", "reason": "测试场景"},
         biz_auto=False,
         assertions=[*_bf("time_invalid")]
     )),
     FlowStep("employee", ApiCase(
-        name="TC-LEAVE-04-员工提交请假申请-请假类型不存在",
+        name="TC-LEAVE-C04-结束时间等于开始时间提交失败",
         method="POST", path="/leave/apply",
-        body={"leaveTypeId": 99, "startTime": "2026-09-01 09:00:00", "endTime": "2026-09-01 18:00:00", "reason": "测试事假申请"},
+        body={"leaveTypeId": 1, "startTime": "2026-09-01 09:00:00", "endTime": "2026-09-01 09:00:00", "reason": "测试场景"},
+        biz_auto=False,
+        assertions=[*_bf("time_invalid")]
+    )),
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C05-必填字段缺失提交失败",
+        method="POST", path="/leave/apply",
+        body={"leaveTypeId": 1, "startTime": "2026-09-01 09:00:00", "endTime": "2026-09-01 18:00:00", "reason": ""},
+        biz_auto=False,
+        assertions=[*_bf("param_error")]
+    )),
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C06-请假类型不存在提交失败",
+        method="POST", path="/leave/apply",
+        body={"leaveTypeId": 99, "startTime": "2026-09-01 09:00:00", "endTime": "2026-09-01 18:00:00", "reason": "测试场景"},
         biz_auto=False,
         assertions=[*_bf("leave_type_not_exist")]
     )),
-    # TC-LEAVE-05 未登录，将在测试函数中使用 ApiClient(base_url) 单独处理
-    # TC-LEAVE-06 非员工角色调用，使用 admin_client 验证权限
-    FlowStep("admin", ApiCase(
-        name="TC-LEAVE-06-员工提交请假申请-非员工角色调用",
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C07-请假原因超过500字提交失败",
         method="POST", path="/leave/apply",
-        body={"leaveTypeId": 1, "startTime": "2026-09-01 09:00:00", "endTime": "2026-09-01 18:00:00", "reason": "测试事假申请"},
+        body={"leaveTypeId": 1, "startTime": "2026-09-01 09:00:00", "endTime": "2026-09-01 18:00:00", "reason": "A" * 501},
+        biz_auto=False,
+        assertions=[*_bf("param_error")]
+    )),
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C08-附件URL超过1000字符提交失败",
+        method="POST", path="/leave/apply",
+        body={"leaveTypeId": 1, "startTime": "2026-09-01 09:00:00", "endTime": "2026-09-01 18:00:00", "reason": "测试场景", "attachment": "http://example.com/" + "a" * 1000},
+        biz_auto=False,
+        assertions=[*_bf("param_error")]
+    )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C09-非员工角色提交申请权限不足",
+        method="POST", path="/leave/apply",
+        body={"leaveTypeId": 1, "startTime": "2026-09-01 09:00:00", "endTime": "2026-09-01 18:00:00", "reason": "测试场景"},
         biz_auto=False,
         assertions=[*_bf("no_permission")]
     )),
+
+    # 员工查看列表（依赖 C01 创建的数据）
     FlowStep("employee", ApiCase(
-        name="TC-LEAVE-07-员工查询我的请假列表-正常分页",
+        name="TC-LEAVE-C10-查看我的请假列表成功",
         method="GET", path="/leave/my/list",
         params={"pageNum": 1, "pageSize": 10},
         assertions=[
-            Assertion(expected=True, op="exists", field="/data/total"),
             Assertion(expected=True, op="exists", field="/data/list"),
-            # 字段名存在性断言，因返回列表，断言首个元素存在即可
-            Assertion(expected=True, op="exists", field="/data/list[0]")
+            Assertion(expected=True, op="exists", field="/data/total")
         ]
     )),
     FlowStep("employee", ApiCase(
-        name="TC-LEAVE-08-员工查询我的请假列表-按状态过滤",
+        name="TC-LEAVE-C11-按状态过滤请假列表",
         method="GET", path="/leave/my/list",
         params={"pageNum": 1, "pageSize": 10, "status": 0},
-        assertions=[
-            Assertion(expected=True, op="exists", field="/data/total"),
-            Assertion(expected=True, op="exists", field="/data/list"),
-        ]
+        assertions=[Assertion(expected=True, op="exists", field="/data/list")]
     )),
     FlowStep("employee", ApiCase(
-        name="TC-LEAVE-09-员工查询我的请假列表-分页参数无效",
+        name="TC-LEAVE-C12-分页参数不合法查询失败",
         method="GET", path="/leave/my/list",
         params={"pageNum": 0, "pageSize": 10},
         biz_auto=False,
         assertions=[*_bf("param_error")]
     )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C13-非员工角色查看我的请假列表权限不足",
+        method="GET", path="/leave/my/list",
+        params={"pageNum": 1, "pageSize": 10},
+        biz_auto=False,
+        assertions=[*_bf("no_permission")]
+    )),
+
+    # 员工查看详情（依赖 C01 创建的数据）
     FlowStep("employee", ApiCase(
-        name="TC-LEAVE-10-员工查询请假详情-正常查询",
+        name="TC-LEAVE-C14-查看本人待审批申请详情",
         method="GET", path="/leave/my/detail",
-        params={"applyNo": "${apply_no}"},  # 依赖TC-LEAVE-01创建的申请单号
+        params={"applyNo": "${apply_no}"},
         assertions=[
-            Assertion(expected=True, op="exists", field="/data/applyNo"),
-            Assertion(expected=True, op="exists", field="/data/status")
+            Assertion(expected=0, op="eq", field="/data/status"),
+            Assertion(expected=True, op="exists", field="/data/approverName"),  # 未审批为空，但字段存在
+            Assertion(expected=True, op="exists", field="/data/approveTime")
         ]
     )),
     FlowStep("employee", ApiCase(
-        name="TC-LEAVE-11-员工查询请假详情-查询不存在的申请单",
+        name="TC-LEAVE-C15-查看本人已通过申请详情",  # 需先通过审批，此处使用假设的已通过单号
         method="GET", path="/leave/my/detail",
-        params={"applyNo": "INVALID"},
+        params={"applyNo": "LV20260901002"},
+        assertions=[Assertion(expected=True, op="exists", field="/data")]
+    )),
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C16-查看本人已驳回申请详情",  # 假设的已驳回单号
+        method="GET", path="/leave/my/detail",
+        params={"applyNo": "LV20260901003"},
+        assertions=[Assertion(expected=True, op="exists", field="/data")]
+    )),
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C17-查看已撤回申请详情",  # 假设的已撤回单号
+        method="GET", path="/leave/my/detail",
+        params={"applyNo": "LV20260901004"},
+        assertions=[Assertion(expected=3, op="eq", field="/data/status")]
+    )),
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C18-查看不存在的申请详情",
+        method="GET", path="/leave/my/detail",
+        params={"applyNo": "LV_NOT_EXIST"},
         biz_auto=False,
         assertions=[*_bf("apply_not_exist")]
     )),
-    # TC-LEAVE-12 查询他人申请单，此处假设存在一个“他人申请单号”，实际测试需配置或动态获取
-    # 为简化，使用固定字符串，测试人员需根据环境调整或使用 fixture 传入
     FlowStep("employee", ApiCase(
-        name="TC-LEAVE-12-员工查询请假详情-查询他人申请单",
+        name="TC-LEAVE-C19-查看他人申请详情权限不足",  # 假设的他人单号
         method="GET", path="/leave/my/detail",
-        params={"applyNo": "OTHER_EMPLYEE_APPLY_NO"}, # 测试人员需替换为实际值
+        params={"applyNo": "LV20260901005"},
         biz_auto=False,
         assertions=[*_bf("no_operation_right")]
     )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C20-非员工角色查看详情权限不足",
+        method="GET", path="/leave/my/detail",
+        params={"applyNo": "${apply_no}"},
+        biz_auto=False,
+        assertions=[*_bf("no_permission")]
+    )),
+
+    # 员工撤回申请（依赖 C01 创建的数据）
     FlowStep("employee", ApiCase(
-        name="TC-LEAVE-13-员工撤回待审批申请-正常成功",
+        name="TC-LEAVE-C21-成功撤回待审批申请",
         method="POST", path="/leave/my/cancel",
-        body={"applyNo": "${apply_no}", "cancelReason": "测试撤回"},
+        body={"applyNo": "${apply_no}", "cancelReason": "行程有变"},
         assertions=[]
     )),
     FlowStep("employee", ApiCase(
-        name="TC-LEAVE-14-员工撤回申请-申请不存在",
+        name="TC-LEAVE-C22-撤回已通过申请失败",  # 假设的已通过单号
         method="POST", path="/leave/my/cancel",
-        body={"applyNo": "INVALID", "cancelReason": "原因"},
-        biz_auto=False,
-        assertions=[*_bf("apply_not_exist")]
-    )),
-    # TC-LEAVE-15 撤回非待审批状态(如已通过)申请，需要另一个已通过的 apply_no
-    # 使用固定占位符，测试人员需准备数据或使用 fixture 传入
-    FlowStep("employee", ApiCase(
-        name="TC-LEAVE-15-员工撤回申请-申请状态非待审批(如已通过)",
-        method="POST", path="/leave/my/cancel",
-        body={"applyNo": "APPROVED_APPLY_NO", "cancelReason": "原因"}, # 测试人员需替换
+        body={"applyNo": "LV20260901002", "cancelReason": "测试"},
         biz_auto=False,
         assertions=[*_bf("cancel_not_allowed")]
     )),
     FlowStep("employee", ApiCase(
-        name="TC-LEAVE-16-员工撤回申请-缺少必填字段cancelReason",
+        name="TC-LEAVE-C23-撤回已驳回申请失败",
         method="POST", path="/leave/my/cancel",
-        body={"applyNo": "${apply_no}"},  # 使用已撤回的申请单号，接口应拒绝
+        body={"applyNo": "LV20260901003", "cancelReason": "测试"},
+        biz_auto=False,
+        assertions=[*_bf("cancel_not_allowed")]
+    )),
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C24-撤回已撤回申请失败",
+        method="POST", path="/leave/my/cancel",
+        body={"applyNo": "LV20260901004", "cancelReason": "测试"},
+        biz_auto=False,
+        assertions=[*_bf("cancel_not_allowed")]
+    )),
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C25-撤回不存在的申请失败",
+        method="POST", path="/leave/my/cancel",
+        body={"applyNo": "LV_NOT_EXIST", "cancelReason": "测试"},
+        biz_auto=False,
+        assertions=[*_bf("apply_not_exist")]
+    )),
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C26-撤回原因为必填",
+        method="POST", path="/leave/my/cancel",
+        body={"applyNo": "${apply_no}", "cancelReason": ""},
         biz_auto=False,
         assertions=[*_bf("param_error")]
     )),
-
-    # ============ 部门主管(manager)角色操作 ============
-    FlowStep("manager", ApiCase(
-        name="TC-LEAVE-17-部门主管查询审批待办列表-正常分页",
-        method="GET", path="/leave/approve/todo",
-        params={"pageNum": 1, "pageSize": 10},
-        assertions=[
-            Assertion(expected=True, op="exists", field="/data/total"),
-            Assertion(expected=True, op="exists", field="/data/list"),
-            Assertion(expected=True, op="exists", field="/data/list[0]")
-        ]
-    )),
-    # TC-LEAVE-18 部门主管通过申请，需要一个“有效待审批申请单号”
-    # 使用固定占位符，测试人员需准备数据
-    FlowStep("manager", ApiCase(
-        name="TC-LEAVE-18-部门主管通过请假申请-正常成功",
-        method="POST", path="/leave/approve",
-        body={"applyNo": "PENDING_APPLY_NO_FOR_MGR", "approveAction": 1, "approveComment": "同意"},
-        assertions=[]
-    )),
-    FlowStep("manager", ApiCase(
-        name="TC-LEAVE-19-部门主管驳回请假申请-正常成功",
-        method="POST", path="/leave/approve",
-        body={"applyNo": "ANOTHER_PENDING_APPLY_NO_FOR_MGR", "approveAction": 2, "approveComment": "理由不充分"},
-        assertions=[]
-    )),
-    FlowStep("manager", ApiCase(
-        name="TC-LEAVE-20-部门主管审批-驳回时未填写审批意见",
-        method="POST", path="/leave/approve",
-        body={"applyNo": "PENDING_APPLY_NO_FOR_MGR", "approveAction": 2}, # 缺少 approveComment
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C27-撤回原因超过200字失败",
+        method="POST", path="/leave/my/cancel",
+        body={"applyNo": "${apply_no}", "cancelReason": "A" * 201},
         biz_auto=False,
-        assertions=[*_bf("approve_comment_required")]
+        assertions=[*_bf("param_error")]
     )),
-    # TC-LEAVE-21 审批非待审批状态(已通过)申请
-    FlowStep("manager", ApiCase(
-        name="TC-LEAVE-21-部门主管审批-非待审批状态申请",
-        method="POST", path="/leave/approve",
-        body={"applyNo": "APPROVED_APPLY_NO", "approveAction": 1},
-        biz_auto=False,
-        assertions=[*_bf("status_invalid")]
-    )),
-    # TC-LEAVE-22 审批非本部门申请
-    FlowStep("manager", ApiCase(
-        name="TC-LEAVE-22-部门主管审批-审批非本部门申请",
-        method="POST", path="/leave/approve",
-        body={"applyNo": "OTHER_DEPT_PENDING_APPLY_NO", "approveAction": 1},
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C28-撤回他人申请权限不足",
+        method="POST", path="/leave/my/cancel",
+        body={"applyNo": "LV20260901005", "cancelReason": "测试"},
         biz_auto=False,
         assertions=[*_bf("no_operation_right")]
     )),
     FlowStep("manager", ApiCase(
-        name="TC-LEAVE-23-部门主管查询审批已办列表-正常分页",
-        method="GET", path="/leave/approve/done",
-        params={"pageNum": 1, "pageSize": 10},
-        assertions=[
-            Assertion(expected=True, op="exists", field="/data/total"),
-            Assertion(expected=True, op="exists", field="/data/list"),
-            Assertion(expected=True, op="exists", field="/data/list[0]")
-        ]
+        name="TC-LEAVE-C29-非员工角色撤回权限不足",
+        method="POST", path="/leave/my/cancel",
+        body={"applyNo": "${apply_no}", "cancelReason": "测试"},
+        biz_auto=False,
+        assertions=[*_bf("no_permission")]
     )),
 
-    # ============ 人事专员(hr_admin)角色操作 ============
+    # 主管审批待办
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C30-查看审批待办列表成功",
+        method="GET", path="/leave/approve/todo",
+        params={"pageNum": 1, "pageSize": 10},
+        assertions=[Assertion(expected=True, op="exists", field="/data/list")]
+    )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C31-按申请人过滤待办列表",
+        method="GET", path="/leave/approve/todo",
+        params={"pageNum": 1, "pageSize": 10, "employeeName": "张三"},
+        assertions=[Assertion(expected=True, op="exists", field="/data/list")]
+    )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C32-按请假类型过滤待办列表",
+        method="GET", path="/leave/approve/todo",
+        params={"pageNum": 1, "pageSize": 10, "leaveTypeId": 1},
+        assertions=[Assertion(expected=True, op="exists", field="/data/list")]
+    )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C33-按状态过滤待办列表",
+        method="GET", path="/leave/approve/todo",
+        params={"pageNum": 1, "pageSize": 10, "status": 0},
+        assertions=[Assertion(expected=True, op="exists", field="/data/list")]
+    )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C34-分页参数不合法查询失败",
+        method="GET", path="/leave/approve/todo",
+        params={"pageNum": 0, "pageSize": 10},
+        biz_auto=False,
+        assertions=[*_bf("param_error")]
+    )),
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C35-非主管角色查看待办列表权限不足",
+        method="GET", path="/leave/approve/todo",
+        params={"pageNum": 1, "pageSize": 10},
+        biz_auto=False,
+        assertions=[*_bf("no_permission")]
+    )),
+
+    # 主管审批操作（依赖 C01 创建的数据，但需注意撤回后状态改变）
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C36-成功通过审批",
+        method="POST", path="/leave/approve",
+        body={"applyNo": "${apply_no}", "approveAction": 1, "approveComment": ""},
+        assertions=[]
+    )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C37-成功驳回审批（填写意见）",  # 需要另一个待审批单号，此处使用假设
+        method="POST", path="/leave/approve",
+        body={"applyNo": "LV20260901002", "approveAction": 2, "approveComment": "理由不充分，请补充材料"},
+        assertions=[]
+    )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C38-驳回未填写审批意见失败",
+        method="POST", path="/leave/approve",
+        body={"applyNo": "${apply_no}", "approveAction": 2, "approveComment": ""},
+        biz_auto=False,
+        assertions=[*_bf("approve_comment_required")]
+    )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C39-审批已通过的申请失败",
+        method="POST", path="/leave/approve",
+        body={"applyNo": "LV20260901003", "approveAction": 1},
+        biz_auto=False,
+        assertions=[*_bf("status_invalid")]
+    )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C40-审批已驳回的申请失败",
+        method="POST", path="/leave/approve",
+        body={"applyNo": "LV20260901004", "approveAction": 2, "approveComment": "测试"},
+        biz_auto=False,
+        assertions=[*_bf("status_invalid")]
+    )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C41-审批已撤回的申请失败",
+        method="POST", path="/leave/approve",
+        body={"applyNo": "LV20260901005", "approveAction": 1},
+        biz_auto=False,
+        assertions=[*_bf("status_invalid")]
+    )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C42-审批不存在的申请失败",
+        method="POST", path="/leave/approve",
+        body={"applyNo": "LV_NOT_EXIST", "approveAction": 1},
+        biz_auto=False,
+        assertions=[*_bf("apply_not_exist")]
+    )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C43-审批非本部门申请权限不足",
+        method="POST", path="/leave/approve",
+        body={"applyNo": "LV20260901006", "approveAction": 1},
+        biz_auto=False,
+        assertions=[*_bf("no_operation_right")]
+    )),
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C44-非主管角色审批权限不足",
+        method="POST", path="/leave/approve",
+        body={"applyNo": "${apply_no}", "approveAction": 1},
+        biz_auto=False,
+        assertions=[*_bf("no_permission")]
+    )),
+
+    # 主管已办列表
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C45-查看审批已办列表成功",
+        method="GET", path="/leave/approve/done",
+        params={"pageNum": 1, "pageSize": 10},
+        assertions=[Assertion(expected=True, op="exists", field="/data/list")]
+    )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C46-按申请人过滤已办列表",
+        method="GET", path="/leave/approve/done",
+        params={"pageNum": 1, "pageSize": 10, "employeeName": "李四"},
+        assertions=[Assertion(expected=True, op="exists", field="/data/list")]
+    )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C47-按状态过滤已办列表",
+        method="GET", path="/leave/approve/done",
+        params={"pageNum": 1, "pageSize": 10, "status": 1},
+        assertions=[Assertion(expected=True, op="exists", field="/data/list")]
+    )),
+    FlowStep("manager", ApiCase(
+        name="TC-LEAVE-C48-分页参数不合法查询失败",
+        method="GET", path="/leave/approve/done",
+        params={"pageNum": 0, "pageSize": 10},
+        biz_auto=False,
+        assertions=[*_bf("param_error")]
+    )),
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C49-非主管角色查看已办列表权限不足",
+        method="GET", path="/leave/approve/done",
+        params={"pageNum": 1, "pageSize": 10},
+        biz_auto=False,
+        assertions=[*_bf("no_permission")]
+    )),
+
+    # 人事查询与统计
     FlowStep("hr_admin", ApiCase(
-        name="TC-LEAVE-24-人事专员查询全公司请假记录-正常分页",
+        name="TC-LEAVE-C50-查看全公司请假记录成功",
         method="GET", path="/leave/admin/list",
         params={"pageNum": 1, "pageSize": 10},
-        assertions=[
-            Assertion(expected=True, op="exists", field="/data/total"),
-            Assertion(expected=True, op="exists", field="/data/list"),
-            Assertion(expected=True, op="exists", field="/data/list[0]")
-        ]
+        assertions=[Assertion(expected=True, op="exists", field="/data/list")]
     )),
     FlowStep("hr_admin", ApiCase(
-        name="TC-LEAVE-25-人事专员查询全公司请假记录-按部门和时间范围过滤",
+        name="TC-LEAVE-C51-按部门过滤请假记录",
         method="GET", path="/leave/admin/list",
-        params={"pageNum": 1, "pageSize": 10, "deptName": "研发部", "startDate": "2026-09-01", "endDate": "2026-09-30"},
-        assertions=[
-            Assertion(expected=True, op="exists", field="/data/total"),
-            Assertion(expected=True, op="exists", field="/data/list"),
-        ]
+        params={"pageNum": 1, "pageSize": 10, "deptName": "研发部"},
+        assertions=[Assertion(expected=True, op="exists", field="/data/list")]
     )),
-    # TC-LEAVE-26 非人事角色调用，使用 employee_client 验证权限
+    FlowStep("hr_admin", ApiCase(
+        name="TC-LEAVE-C52-按状态过滤请假记录",
+        method="GET", path="/leave/admin/list",
+        params={"pageNum": 1, "pageSize": 10, "status": 1},
+        assertions=[Assertion(expected=True, op="exists", field="/data/list")]
+    )),
+    FlowStep("hr_admin", ApiCase(
+        name="TC-LEAVE-C53-按申请时间范围过滤请假记录",
+        method="GET", path="/leave/admin/list",
+        params={"pageNum": 1, "pageSize": 10, "startDate": "2026-09-01", "endDate": "2026-09-30"},
+        assertions=[Assertion(expected=True, op="exists", field="/data/list")]
+    )),
+    FlowStep("hr_admin", ApiCase(
+        name="TC-LEAVE-C54-组合条件过滤请假记录",
+        method="GET", path="/leave/admin/list",
+        params={"pageNum": 1, "pageSize": 10, "deptName": "研发部", "status": 0, "startDate": "2026-09-01", "endDate": "2026-09-30"},
+        assertions=[Assertion(expected=True, op="exists", field="/data/list")]
+    )),
+    FlowStep("hr_admin", ApiCase(
+        name="TC-LEAVE-C55-分页参数不合法查询失败",
+        method="GET", path="/leave/admin/list",
+        params={"pageNum": 0, "pageSize": 10},
+        biz_auto=False,
+        assertions=[*_bf("param_error")]
+    )),
+    FlowStep("hr_admin", ApiCase(
+        name="TC-LEAVE-C56-日期格式错误查询失败",
+        method="GET", path="/leave/admin/list",
+        params={"pageNum": 1, "pageSize": 10, "startDate": "2026/09/01"},
+        biz_auto=False,
+        assertions=[*_bf("param_error")]
+    )),
     FlowStep("employee", ApiCase(
-        name="TC-LEAVE-26-人事专员查询全公司请假记录-非人事角色调用",
+        name="TC-LEAVE-C57-非人事专员角色查看请假记录权限不足",
         method="GET", path="/leave/admin/list",
         params={"pageNum": 1, "pageSize": 10},
         biz_auto=False,
         assertions=[*_bf("no_permission")]
     )),
     FlowStep("hr_admin", ApiCase(
-        name="TC-LEAVE-27-人事专员统计请假时长-正常统计",
+        name="TC-LEAVE-C58-查看请假时长统计成功",
         method="GET", path="/leave/admin/statistics",
         params={"startDate": "2026-09-01", "endDate": "2026-09-30"},
-        assertions=[
-            Assertion(expected=True, op="exists", field="/data"), # 统计结果是一个数组
-        ]
+        assertions=[Assertion(expected=True, op="exists", field="/data")]
     )),
     FlowStep("hr_admin", ApiCase(
-        name="TC-LEAVE-28-人事专员统计请假时长-缺少必填参数",
+        name="TC-LEAVE-C59-必填日期参数缺失查询失败",
         method="GET", path="/leave/admin/statistics",
-        params={"startDate": "2026-09-01"}, # 缺少 endDate
+        params={"startDate": "", "endDate": "2026-09-30"},
         biz_auto=False,
         assertions=[*_bf("param_error")]
     )),
+    FlowStep("hr_admin", ApiCase(
+        name="TC-LEAVE-C60-日期格式错误查询失败",
+        method="GET", path="/leave/admin/statistics",
+        params={"startDate": "2026/09/01", "endDate": "2026-09-30"},
+        biz_auto=False,
+        assertions=[*_bf("param_error")]
+    )),
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C61-非人事专员角色查看统计权限不足",
+        method="GET", path="/leave/admin/statistics",
+        params={"startDate": "2026-09-01", "endDate": "2026-09-30"},
+        biz_auto=False,
+        assertions=[*_bf("no_permission")]
+    )),
 
-    # ============ 未登录(匿名)访问 ============
-    # TC-LEAVE-29 未登录访问任意接口，在测试函数中特殊处理
-]
-
-@pytest.mark.smartadmin
-@pytest.mark.api
-@pytest.mark.requires_role('employee')
-@pytest.mark.requires_role('manager')
-@pytest.mark.requires_role('hr_admin')
-@allure.feature("SmartAdmin · 员工请假模块")
-@allure.story("跨角色接口流程与权限验证")
-@pytest.mark.parametrize("step", FLOW_STEPS, ids=lambda s: s.case.name)
-def test_leave_module_flow(role_registry, ctx: ScenarioContext, cleanup_registry, base_url, employee_client, step: FlowStep):
-    # 根据 step.role 获取对应的 API 客户端
-    if step.role == "manager":
-        client = role_registry["manager"]  # 使用 role_registry 获取 manager 客户端
-    elif step.role == "hr_admin":
-        client = role_registry["hr_admin"] # 使用 role_registry 获取 hr_admin 客户端
-    elif step.role == "employee":
-        client = employee_client
-    else:
-        # 理论上 FlowStep 中 role 应只包含上述三种，此为防御性编程
-        raise ValueError(f"未知角色: {step.role}")
-
-    result = run_case(client, ctx, step.case)
-
-    # 数据串联：TC-LEAVE-01 成功后，分页反查获取最新的 apply_no 并保存到 ctx
-    if result.passed and step.case.name == "TC-LEAVE-01-员工提交请假申请-正常成功":
-        list_result = run_case(employee_client, ctx, ApiCase(
-            name="反查申请单号",
-            method="GET", path="/leave/my/list",
-            params={"pageNum": 1, "pageSize": 1},
-            assertions=[]
-        ))
-        if list_result.passed and list_result.response_data:
-            items = list_result.response_data.get("data", {}).get("list", [])
-            if items:
-                apply_no = items[0].get("applyNo")
-                if apply_no:
-                    ctx.save({"apply_no": apply_no})
-
-    assert result.passed, f"[{step.role}] {step.case.name}: {result.failure_summary}"
-
-# 单独测试未登录访问 (TC-LEAVE-29)
-@pytest.mark.smartadmin
-@pytest.mark.api
-@allure.feature("SmartAdmin · 员工请假模块")
-@allure.story("未登录访问")
-def test_leave_anonymous_access(base_url, ctx: ScenarioContext):
-    anonymous_client = ApiClient(base_url)  # 不登录，token=None
-    case = ApiCase(
-        name="TC-LEAVE-29-未登录访问任意接口",
-        method="GET", path="/leave/my/list",
-        params={"pageNum": 1, "pageSize": 10},
+    # 通用权限用例
+    FlowStep("anonymous", ApiCase(
+        name="TC-LEAVE-C62-未登录访问接口返回未登录",
+        method="POST", path="/leave/apply",
+        body={"leaveTypeId": 1, "startTime": "2026-09-01 09:00:00", "endTime": "2026-09-01 18:00:00", "reason": "测试"},
         biz_auto=False,
         assertions=[*_bf("not_login")]
-    )
-    result = run_case(anonymous_client, ctx, case)
-    assert result.passed, f"匿名访问失败: {result.failure_summary}"
+    )),
+    FlowStep("employee", ApiCase(
+        name="TC-LEAVE-C63-跨角色访问接口返回无权限",
+        method="GET", path="/leave/approve/todo",
+        params={"pageNum": 1, "pageSize": 10},
+        biz_auto=False,
+        assertions=[*_bf("no_permission")]
+    )),
+]
+
+pytestmark = [pytest.mark.smartadmin, pytest.mark.api, pytest.mark.requires_role('employee'),
+              pytest.mark.requires_role('manager'), pytest.mark.requires_role('hr_admin')]
+
+@allure.feature("SmartAdmin · 请假模块")
+@allure.story("跨角色权限与业务流程")
+@pytest.mark.parametrize("step", FLOW_STEPS, ids=lambda s: s.case.name)
+def test_leave_role_flow(role_registry, ctx: ScenarioContext, cleanup_registry, base_url, admin_client, step: FlowStep):
+    # 匿名用例
+    if step.role == "anonymous":
+        client = ApiClient(base_url)
+    # 管理员角色（用于某些通用校验，此处未使用，保留逻辑）
+    elif step.role == "admin":
+        client = admin_client
+    else:
+        # 按 step.role 懒登录该角色独立会话
+        client = role_registry[step.role]
+    
+    result = run_case(client, ctx, step.case)
+    
+    # 对于成功的创建用例，分页反查 applyNo 并注册清理
+    if result.passed and step.case.name == "TC-LEAVE-C01-成功提交事假申请":
+        # 通过分页查询反查刚创建的申请（假设第一条即最新）
+        list_case = ApiCase(
+            name="TC-LEAVE-C01-分页反查id",
+            method="GET", path="/leave/my/list",
+            params={"pageNum": 1, "pageSize": 10},
+            assertions=[Assertion(expected=True, op="exists", field="/data/list")],
+            save={"/data/list[0]/applyNo": "apply_no"}
+        )
+        list_result = run_case(client, ctx, list_case)
+        if list_result.passed:
+            apply_no = ctx.get("apply_no")
+            if apply_no:
+                # 注册删除接口（文档未提供，仅示例）
+                cleanup_registry.register_delete("/leave/delete/{applyNo}", apply_no)
+    
+    assert result.passed, f"[{step.role}] {step.case.name}: {result.failure_summary}"

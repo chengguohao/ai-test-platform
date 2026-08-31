@@ -191,7 +191,7 @@ def _auto_run_async(run_id: int, project_id: int, mode: str = "full") -> None:
                 for s in _stages(db, run_id))
             if is_continuation:
                 for s in _stages(db, run_id):
-                    if s.stage_type in ("case_gen", "case_review", "auto_gen", "execute"):
+                    if s.stage_type in ("case_gen", "auto_gen", "execute"):
                         s.status = "pending"   # 用例阶段也重置：续跑时改生成 API 用例
                         changed = True
                     elif s.stage_type == "api_doc" and s.status == "skipped":
@@ -236,32 +236,7 @@ def _auto_run_async(run_id: int, project_id: int, mode: str = "full") -> None:
                 n = sum(len(g.get("cases", [])) for g in tree.get("groups", []))
                 step(f"③ 用例生成完成：v{out.get('version')}，"
                      f"{len(tree.get('groups', []))} 组 {n} 条{cname}用例")
-                # 新流程（无评审阶段）：生成后自动评审通过（一键执行=自动通过），
-                # 等价原 case_review 阶段的自动批准，保证 auto_gen 守卫（用例集 approved）通过
-                if not any(s.stage_type == "case_review" for s in _stages(db, run_id)):
-                    cs = (db.query(models.CaseSet).filter(models.CaseSet.run_id == run_id)
-                          .order_by(models.CaseSet.version.desc()).first())
-                    if cs:
-                        cs.status = "approved"
-                        db.add(models.ReviewRecord(run_id=run_id, result="approved",
-                                                   reviewer="一键执行"))
-                        db.commit()
-                    # 仅需求文档模式：到生成用例即完成全部任务——剩余阶段置跳过，实例标记完成
-                    if mode == "cases_only":
-                        for s in _stages(db, run_id):
-                            if s.enabled and s.status in ("pending", "running"):
-                                s.status = "skipped"
-                        run.status = "success"
-                        run.current_stage_idx = st.idx
-                        db.commit()
-                        step("===== 仅需求文档模式执行完成：已生成业务功能用例，本次任务全部完成。"
-                             "上传接口文档后可再次一键执行，续跑自动化生成与执行测试 =====")
-                        task_progress.finish(pkey)
-                        return
-                _advance_stage(db, run, st)
-
-            elif t == "case_review":
-                step("④ 用例评审：自动评审通过最新用例集")
+                # 一键执行=自动评审通过：生成后置 approved，保证 auto_gen 守卫（用例集 approved）通过
                 cs = (db.query(models.CaseSet).filter(models.CaseSet.run_id == run_id)
                       .order_by(models.CaseSet.version.desc()).first())
                 if cs:
@@ -269,8 +244,7 @@ def _auto_run_async(run_id: int, project_id: int, mode: str = "full") -> None:
                     db.add(models.ReviewRecord(run_id=run_id, result="approved",
                                                reviewer="一键执行"))
                     db.commit()
-                st.status = "success"
-                # 仅需求文档模式：到用例评审即完成全部任务——剩余阶段置跳过，实例标记完成
+                # 仅需求文档模式：到生成用例即完成全部任务——剩余阶段置跳过，实例标记完成
                 if mode == "cases_only":
                     for s in _stages(db, run_id):
                         if s.enabled and s.status in ("pending", "running"):
@@ -278,7 +252,7 @@ def _auto_run_async(run_id: int, project_id: int, mode: str = "full") -> None:
                     run.status = "success"
                     run.current_stage_idx = st.idx
                     db.commit()
-                    step("===== 仅需求文档模式执行完成：已到用例评审，本次任务全部完成。"
+                    step("===== 仅需求文档模式执行完成：已生成业务功能用例，本次任务全部完成。"
                          "上传接口文档后可再次一键执行，续跑自动化生成与执行测试 =====")
                     task_progress.finish(pkey)
                     return

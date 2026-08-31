@@ -19,13 +19,22 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import models as _models  # noqa: F401  确保建表
-from app.api import ai_gen, ai_models, artifacts, connectors, execution, folders, projects, workflow
+from app.api import ai_gen, ai_models, artifacts, connectors, execution, folders, knowledge, projects, workflow
 from app.db import init_db
 
 # 启动生命周期：建表（用新版 lifespan 替代已弃用的 on_event，消除 DeprecationWarning）
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
+    # 自愈：后端重启=任务线程清空，把遗留的「孤儿 running」阶段重置为 pending
+    # （否则阶段永久卡在「进行中」，看板多卡片同时 running）
+    from app.api.workflow import heal_stuck_running
+    from app.db import SessionLocal
+    db = SessionLocal()
+    try:
+        heal_stuck_running(db)
+    finally:
+        db.close()
     yield
 
 
@@ -41,7 +50,8 @@ app.add_middleware(
 )
 
 for r in (projects.router, workflow.router, artifacts.router, connectors.router,
-          ai_gen.router, ai_models.router, execution.router, folders.router):
+          ai_gen.router, ai_models.router, execution.router, folders.router,
+          knowledge.router):
     app.include_router(r)
 
 

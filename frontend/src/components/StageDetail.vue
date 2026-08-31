@@ -98,10 +98,12 @@
         <el-button type="primary" class="mt8" :loading="saving" @click="saveRequirement">
           <el-icon style="margin-right: 4px"><Upload /></el-icon>保存需求工件
         </el-button>
-        <el-button class="mt8" :loading="summarizing" :disabled="saving || !requirementArtifacts.length" @click="genSummary">
+        <el-button class="mt8" :loading="summarizing" :disabled="!reqGenReady" @click="genSummary">
           <el-icon style="margin-right: 4px"><MagicStick /></el-icon>生成需求摘要
         </el-button>
         <div class="form-hint" v-if="saving" style="color: #e6a23c">需求工件保存中，请稍候…（完成后才能生成摘要）</div>
+        <div class="form-hint" v-else-if="reqVisioning" style="color: #e6a23c">识图规范化进行中，完成后才能生成需求摘要…</div>
+        <div class="form-hint" v-else-if="!reqGenReady" style="color: #909399">请先「保存需求工件」保存成功后才能生成需求摘要</div>
 
         <div v-if="reqHasImages" class="mt8">
           <div class="block-title">图片识别与规范化</div>
@@ -368,11 +370,6 @@
         </div>
       </template>
 
-      <!-- ============ case_review：用例评审（复用 ReviewPanel） ============ -->
-      <template v-else-if="stage.stage_type === 'case_review'">
-        <ReviewPanel :project="project" :run="run" @changed="onReviewChanged" />
-      </template>
-
       <!-- ============ auto_gen：自动化生成 ============ -->
       <template v-else-if="stage.stage_type === 'auto_gen'">
         <el-alert
@@ -635,7 +632,6 @@ import CaseTree from './CaseTree.vue'
 import CaseTable from './CaseTable.vue'
 import DiffView from './DiffView.vue'
 import ArtifactList from './ArtifactList.vue'
-import ReviewPanel from './ReviewPanel.vue'
 import {
   artifactApi,
   connectorApi,
@@ -664,7 +660,6 @@ const STAGE_GUIDE = {
   requirement: '选择需求来源（上传文件 / 粘贴文本 / URL / 连接器）→ 点「保存需求工件」→ 点「生成需求摘要」，完成后本阶段自动标记为已完成。',
   api_doc: '上传或拉取接口文档（OpenAPI / Swagger）→ 点「保存接口文档工件」，完成后自动标记为已完成。暂无接口文档可点「跳过此阶段」。',
   case_gen: '选择用例类型（业务功能 / 接口测试）→ 点「生成用例」，AI 自动产出用例树；可「导出 XMind/Excel」；检查无误后按类型点「评审通过」，全部评完自动进入下一步。',
-  case_review: '评审最新用例集：满意点「评审通过」；不满意填写原因「打回」，流程会自动回到生成用例阶段重新生成。',
   auto_gen: '点「生成自动化用例」：基于已批准用例 + 接口文档生成 pytest 脚本，完成后本阶段自动标记为已完成。',
   execute: '先「环境自检」确认环境可用 → 点「执行测试」→ 查看结果与 Allure 报告，执行通过后本阶段自动标记为已完成。',
   skill: '选择一种 AI 能力 → 可填运行参数 → 点「运行 Skill」，结果自动存为工件。',
@@ -681,7 +676,6 @@ const pillType = computed(() => {
     requirement: 'pill-primary',
     api_doc: 'pill',
     case_gen: 'pill-primary',
-    case_review: 'pill',
     auto_gen: 'pill-primary',
     skill: 'pill-primary',
     mcp: 'pill',
@@ -697,7 +691,19 @@ const apiArtifacts = computed(() => artifacts.value.filter((a) => a.stage_type =
 const skillArtifacts = computed(() => artifacts.value.filter((a) => a.stage_type === 'skill'))
 const mcpArtifacts = computed(() => artifacts.value.filter((a) => a.stage_type === 'mcp'))
 /* 生成文件 + 生成日志（gen_log / case_tree / auto_file / exec_log 等） */
-const caseGenArtifacts = computed(() => artifacts.value.filter((a) => a.stage_type === 'case_gen'))
+const caseGenArtifacts = computed(() =>
+  artifacts.value.filter((a) => a.stage_type === 'case_gen' && artifactBelongsTo(a, caseType.value))
+)
+
+/** 判断 case_gen 工件是否属于指定用例类型（business/api）。
+ *  后端日志/用例树工件在 source.case_type 记录类型；旧数据缺失时按名称兜底（含「业务/接口」字样）。 */
+function artifactBelongsTo(a, t) {
+  const srcT = a.source?.case_type
+  if (srcT) return srcT === t
+  const name = a.name || ''
+  if (t === 'api') return name.includes('接口')
+  return !name.includes('接口')
+}
 const autoGenArtifacts = computed(() => artifacts.value.filter((a) => a.stage_type === 'auto_gen'))
 const executeArtifacts = computed(() => artifacts.value.filter((a) => a.stage_type === 'execute'))
 
@@ -734,6 +740,15 @@ async function downloadArtifact(a) {
 
 async function removeArtifact(a) {
   if (!a?.id) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除工件「${a.name || a.type}」吗？删除后不可恢复。`,
+      '删除工件',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
   await artifactApi.remove(a.id)
   ElMessage.success('已删除')
   await loadArtifacts()
@@ -773,6 +788,22 @@ const reqHasImages = ref(false)
 const reqThinkSteps = ref([])
 const thinkOpenReq = ref([])
 let reqThinkTimer = null
+// 需求摘要闸门：本次会话「需求工件已保存成功」才允许生成（含图=识图规范化完成）
+const reqSaved = ref(false)
+const reqVisioning = ref(false)   // 识图规范化进行中，完成后才可生成摘要
+
+/* 生成需求摘要的前置条件：本次保存成功，或重开/刷新后已存在「已规范化」工件 */
+const reqGenReady = computed(() => {
+  if (saving.value || reqVisioning.value) return false
+  if (reqSaved.value) return true
+  // 历史兜底：name 含「已规范化」（含图/降级产物）即视为保存成功过，避免刷新后误禁用
+  return requirementArtifacts.value.some((a) => /已规范化/.test(a.name || ''))
+})
+
+// 任何来源/含图开关变更：视为「保存结果已过期」，需重新保存后才能生成摘要
+watch([reqFile, pasteText, reqUrl, fetched, selConnectorId, reqHasImages], () => {
+  reqSaved.value = false
+})
 
 const selConnector = computed(() =>
   connectors.value.find((c) => c.id === selConnectorId.value)
@@ -839,6 +870,10 @@ async function saveRequirement() {
     } else {
       ElMessage.warning('请先选择文件或拉取内容')
     }
+    // 保存成功：不含图立即放行摘要；含图则置 reqVisioning，等规范化完成后再放行
+    if (uploaded) {
+      reqSaved.value = !reqHasImages.value
+    }
     // 勾选「含图片」：后台已启动多模态规范化，轮询进度并在完成后刷新工件列表
     if (uploaded && reqHasImages.value) {
       startReqVisionPoll(props.run.id)
@@ -852,6 +887,7 @@ async function saveRequirement() {
 function startReqVisionPoll(runId) {
   reqThinkSteps.value = []
   thinkOpenReq.value = ['reqVision']
+  reqVisioning.value = true
   if (reqThinkTimer) clearInterval(reqThinkTimer)
   reqThinkTimer = setInterval(async () => {
     try {
@@ -862,6 +898,9 @@ function startReqVisionPoll(runId) {
         clearInterval(reqThinkTimer)
         reqThinkTimer = null
         await loadArtifacts()
+        reqVisioning.value = false
+        // 规范化完成（失败降级也会保存新工件）：放行「生成需求摘要」
+        reqSaved.value = true
         if (d.error) ElMessage.warning(`识图规范化未完成（已降级）：${d.error}`)
         else ElMessage.success('识图规范化完成，已生成「需求文档（已规范化）」')
       }
@@ -884,6 +923,8 @@ async function genSummary() {
     const r = await aiApi.summary(props.run.id)
     summary.value = r.summary
     genModel.value = r.model || ''
+    // 刷新工件列表：让「已有需求工件」里立即出现本次生成的摘要工件
+    await loadArtifacts()
     // 摘要已持久化到阶段 meta：通知看板刷新阶段数据，重开抽屉可回显
     emit('changed')
     ElMessage.success('需求摘要已生成并保存，关闭后重新打开仍可查看')
@@ -1426,13 +1467,6 @@ function openAllure() {
 
 /* ---------- 通用阶段操作：无手动完成/失败操作，状态由步骤自动控制 ---------- */
 
-/* ---------- 打开时重置 ---------- */
-function onReviewChanged() {
-  // ReviewPanel 内部操作完成后，同步刷新阶段状态与用例集
-  emit('changed')
-  loadCaseSets()
-}
-
 /* 打开序号：每次打开/切换卡片递增；回显阶段只允许最新一次调用生效，
    避免「打开 + 切换卡片」同一 tick 双触发时旧调用覆盖新阶段的回显 */
 let openSeq = 0
@@ -1443,8 +1477,8 @@ function onOpen() {
   Promise.all([loadArtifacts(), loadConnectors(), loadSkills()])
     .then(() => {
       const t = props.stage?.stage_type
-      // 需要用例集数据的阶段：预览/评审/自动化生成（回显结果）/执行（取模块名）
-      if (['case_gen', 'case_review', 'auto_gen', 'execute'].includes(t)) {
+      // 需要用例集数据的阶段：预览/自动化生成（回显结果）/执行（取模块名）
+      if (['case_gen', 'auto_gen', 'execute'].includes(t)) {
         return loadCaseSets()
       }
     })

@@ -17,7 +17,6 @@ STAGE_LIBRARY = [
     {"type": "requirement", "name": "需求上传", "desc": "提交需求资料：上传文件 / 粘贴文字 / 填链接 / 对接公司平台", "can_skip": False},
     {"type": "api_doc", "name": "接口文档", "desc": "提交接口文档；本需求没有新增接口时可以跳过", "can_skip": True},
     {"type": "case_gen", "name": "生成用例", "desc": "AI 自动把需求（+接口文档/知识库资料）转成测试用例，可预览、可重新生成", "can_skip": False},
-    {"type": "case_review", "name": "用例评审", "desc": "下载 XMind/Excel 给测试人员评审：打回重新生成，或人工改后重新上传", "can_skip": False},
     {"type": "auto_gen", "name": "自动化生成", "desc": "AI 按已批准的用例 + 接口文档，自动生成接口自动化脚本", "can_skip": True},
     {"type": "execute", "name": "执行报告", "desc": "检查测试环境 → 自动跑自动化用例 → 生成 Allure 报告", "can_skip": False},
     {"type": "skill", "name": "AI 处理", "desc": "选一种 AI 能力（需求摘要/生成用例/自动化生成等）单独执行，结果存为工件，可插到任意步骤", "can_skip": True},
@@ -110,12 +109,13 @@ def create_run(body: schemas.RunIn, db: Session = Depends(get_db)):
     if not t:
         raise HTTPException(404, "模板不存在")
     snapshot = [dict(s) for s in t.stages]
-    # 名称：用户填了就用；没填自动「第 N 轮流程」（N=该项目已有实例数+1）
+    # 名称：用户填了就用；没填自动「第 N 轮流程」（N=该项目内实例序号，从 1 开始）
     seq = _next_run_seq(db, body.project_id)
     run = models.WorkflowRun(
         project_id=body.project_id, template_id=body.template_id,
         template_snapshot=snapshot, status="pending",
         name=(body.name or "").strip() or f"第 {seq} 轮流程",
+        run_no=seq,   # 项目内序号存库：跨项目不连续，仅项目内自洽
     )
     db.add(run)
     db.flush()
@@ -226,8 +226,7 @@ def _check_stage_prerequisite(db: Session, st: models.StageState) -> None:
 
     规则（按 stage_type）：
       requirement / api_doc : 必须有对应工件
-      case_gen              : 必须有用例集
-      case_review           : 最新用例集必须 approved
+      case_gen              : 必须有用例集且已评审通过
       auto_gen              : 必须有 auto_file 工件
       execute               : 必须有执行记录且 passed
       skill / mcp           : 有结果工件
@@ -244,22 +243,13 @@ def _check_stage_prerequisite(db: Session, st: models.StageState) -> None:
         rows = db.query(models.CaseSet).filter(models.CaseSet.run_id == st.run_id).all()
         if not rows:
             raise HTTPException(400, "「生成用例」尚无用例集，请先生成用例")
-        # 旧流程（含 case_review 阶段）：有用例集即可完成，评审在评审阶段处理
-        if _has_stage_type(db, st.run_id, "case_review"):
-            return
-        # 新流程：生成了什么就必须评审什么——任一已生成类型的用例集未评审通过则不能完成
+        # 生成了什么就必须评审什么——任一已生成类型的用例集未评审通过则不能完成
         pending = _pending_review_types(db, st.run_id)
         if pending:
-            label = "、".join("接口测试" if t == "api" else "业务功能" for t in pending)
+            label = "、".join("接口测试" if x == "api" else "业务功能" for x in pending)
             raise HTTPException(400, f"「生成用例」的{label}用例集尚未评审通过，请在生成用例页点「评审通过」")
-    elif t == "case_review":
-        cs = (db.query(models.CaseSet).filter(models.CaseSet.run_id == st.run_id)
-              .order_by(models.CaseSet.version.desc()).first())
-        if not cs or cs.status != "approved":
-            raise HTTPException(400, "「用例评审」尚未通过：最新用例集状态不是 approved")
     elif t == "auto_gen":
-        # 评审门槛统一收敛到「用例集已批准」：新流程（无 case_review）由生成用例页「评审通过」
-        # 标记 approved；旧流程（含 case_review）评审通过同样置 approved → 两者同一条守卫。
+        # 评审门槛统一收敛到「用例集已批准」：由生成用例页「评审通过」标记 approved。
         # 有接口文档时必须存在已批准的接口测试用例集（自动化脚本依赖接口用例）。
         approved = [c for c in db.query(models.CaseSet).filter(
             models.CaseSet.run_id == st.run_id,
@@ -286,13 +276,6 @@ def _check_stage_prerequisite(db: Session, st: models.StageState) -> None:
             raise HTTPException(400, f"「{st.stage_name}」尚无结果工件")
 
 
-def _has_stage_type(db: Session, run_id: int, stage_type: str) -> bool:
-    """该流程实例是否包含某类型阶段（用于区分新旧流程）。"""
-    return db.execute(select(models.StageState.id).where(
-        models.StageState.run_id == run_id,
-        models.StageState.stage_type == stage_type).limit(1)).scalar_one_or_none() is not None
-
-
 def _pending_review_types(db: Session, run_id: int) -> list[str]:
     """返回「已生成但尚未评审通过」的用例类型列表（business/api）。
 
@@ -307,37 +290,67 @@ def _pending_review_types(db: Session, run_id: int) -> list[str]:
     return [t for t, c in latest.items() if c.status != "approved"]
 
 
+def _case_gen_summary(db: Session, run_id: int) -> dict:
+    """生成用例阶段的逐类型状态摘要：business/api 各自是「未生成/待评审/已评审」。
+
+    供前端卡片显示组合文案，例如：
+      - 业务已评审 + 接口未生成  -> { business: approved, api: none }（阶段不可完成）
+      - 两类型都待评审           -> { business: pending_review, api: pending_review }
+      - 两类型都已评审           -> { business: approved, api: approved }（阶段可完成）
+    """
+    rows = db.query(models.CaseSet).filter(models.CaseSet.run_id == run_id).all()
+    latest: dict[str, models.CaseSet] = {}
+    for c in rows:
+        t = (c.gen_meta or {}).get("case_type", "business")
+        if t not in latest or c.version > latest[t].version:
+            latest[t] = c
+    summary: dict[str, str] = {}
+    for t in ("business", "api"):
+        cs = latest.get(t)
+        if not cs:
+            summary[t] = "none"              # 未生成
+        elif cs.status == "approved":
+            summary[t] = "approved"          # 已评审通过
+        else:
+            summary[t] = "pending_review"    # 已生成未评审
+    return summary
+
+
 def sync_case_gen_status(db: Session, run_id: int) -> None:
     """生成用例阶段状态同步：生成 / 评审 / 打回重传后调用。
 
-    新流程（无 case_review 阶段）：任一已生成类型未评审通过 → 阶段置 pending_review（待评审），
-    并把待评审类型写入 meta.pending_review 供前端卡片展示；全部评审通过 → 自动置 success 并推进。
-    旧流程（含 case_review 阶段）：保持原行为——生成即完成，推进到评审阶段。
+    按每类用例（业务/接口）的生成+评审状态组合：
+      - 两类都生成并评审通过 → 阶段置 success 并推进；
+      - 任一类型已生成但未评审通过 → 阶段置 pending_review（待评审），
+        并把逐类型摘要写入 meta.case_gen_summary 供前端卡片显示组合文案；
+      - 任一类型未生成 → 阶段保持待处理（该类型尚未生成，谈不上评审）。
     """
     st = db.execute(select(models.StageState).where(
         models.StageState.run_id == run_id,
         models.StageState.stage_type == "case_gen").limit(1)).scalar_one_or_none()
     if not st:
         return
-    if _has_stage_type(db, run_id, "case_review"):
-        try:
-            complete_stage_by_type(db, run_id, "case_gen")
-        except Exception:  # noqa: BLE001
-            pass
-        return
-    pending = _pending_review_types(db, run_id)
+    summary = _case_gen_summary(db, run_id)
+    pending = [t for t, s in summary.items() if s == "pending_review"]
     if pending:
         if st.status != "pending_review":
             st.status = "pending_review"
-        meta = {**(st.meta or {}), "pending_review": pending}
+        meta = {**(st.meta or {}), "pending_review": pending,
+                "case_gen_summary": summary}
         meta.pop("error", None)   # 清掉历史失败遗留的 error
         st.meta = meta
         db.commit()
-    else:
+    elif all(s == "approved" for s in summary.values()) and summary:
         try:
             complete_stage_by_type(db, run_id, "case_gen")
         except Exception:  # noqa: BLE001
             pass
+    else:
+        # 存在未生成类型（业务或接口都没生成）：阶段回待处理，等待用户生成
+        if st.status not in ("pending", "running", "returned"):
+            st.status = "pending"
+        st.meta = {**(st.meta or {}), "case_gen_summary": summary}
+        db.commit()
 
 
 @router.get("/runs/{run_id}/advance")
@@ -415,3 +428,37 @@ def mark_stage_status(db: Session, run_id: int, stage_type: str,
         meta.pop("error", None)   # 进入 running 时清掉上次失败遗留的错误信息
         st.meta = meta
     db.commit()
+
+
+def heal_stuck_running(db: Session) -> int:
+    """自愈：清除「孤儿进行中」状态（后端启动时调用）。
+
+    生成类接口入口会立即把对应阶段置 running；若接口中途被中断
+    （后端重启 / 进程退出，唯一的事故源），后续推进永远不执行，
+    阶段就永久停在 running——前端看板表现为多个卡片一直「进行中」。
+    后端重启即任务线程全部清空，因此把全部 running 阶段重置为 pending，
+    并把已无任何 running 阶段却仍标 running 的实例校正回 pending，
+    用户重新操作即可正常推进；success / skipped / pending_review 等终态不受影响。
+    """
+    fixed = 0
+    running_stages = db.execute(select(models.StageState).where(
+        models.StageState.status == "running")).scalars().all()
+    for st in running_stages:
+        if st.enabled:
+            st.status = "pending"
+            fixed += 1
+    # 实例级校正：没有 running 阶段却标 running 的实例 -> 视实例未在运行
+    for r in db.execute(select(models.WorkflowRun).where(
+            models.WorkflowRun.status == "running")).scalars():
+        any_running = db.execute(select(models.StageState.id).where(
+            models.StageState.run_id == r.id,
+            models.StageState.status == "running", models.StageState.enabled == True).limit(1)).scalar_one_or_none()  # noqa: E712
+        if not any_running:
+            all_done = db.execute(select(models.StageState.id).where(
+                models.StageState.run_id == r.id,
+                models.StageState.enabled == True,  # noqa: E712
+                models.StageState.status.not_in(("success", "skipped"))).limit(1)).scalar_one_or_none()
+            r.status = "success" if not all_done else "pending"
+            fixed += 1
+    db.commit()
+    return fixed

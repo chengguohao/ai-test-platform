@@ -20,7 +20,9 @@ SessionLocal = _SessionLocal
 # 轻量迁移：模型新增列时给已有表补列（create_all 只建新表不 ALTER 旧表）
 # 格式：表名 -> {列名: DDL 类型}
 _MIGRATE_ADD_COLUMNS = {
-    "workflow_runs": {"name": "VARCHAR(128) DEFAULT '' NOT NULL"},
+    "workflow_runs": {"name": "VARCHAR(128) DEFAULT '' NOT NULL",
+                      "run_no": "INTEGER DEFAULT 0"},
+    "knowledge_entries": {"ref_snapshot": "JSON"},
     "projects": {"ai_model_id": "INTEGER DEFAULT 0 NOT NULL",
                  "vision_model_id": "INTEGER DEFAULT 0 NOT NULL",
                  "folder_id": "INTEGER"},

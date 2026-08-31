@@ -179,10 +179,15 @@ def build_system_prompt(p: SystemProfile) -> str:
     if p.has_roles:
         role_block = _ROLE_SECTION_CODE
         mark_entries = (f"pytest.mark.{p.marker}, " if p.marker else "") + "pytest.mark.api, "
+        # 可用角色 = .env 已配置账号的角色键：requires_role / FlowStep role 只能取这些，
+        # 避免引用未配置角色导致整模块 skip
+        avail = p.available_roles or ["admin"]
+        role_markers = ",\n              ".join(f"pytest.mark.requires_role('{r}')" for r in avail)
         role_block = role_block.replace(
             "__ROLE_PYTESTMARK_TAIL__",
-            f"pytestmark = [{mark_entries}pytest.mark.requires_role('reporter'),\n"
-            f"              pytest.mark.requires_role('auditor')]")
+            f"pytestmark = [{mark_entries}{role_markers}]")
+        role_block += (f"\n可用角色（.env 已配置账号，FlowStep role / requires_role 只能取这些）："
+                       f"{', '.join(avail)}。未配置角色会导致整模块 skip，禁止引用清单外的角色。")
         role_bf = ("[*_bf(\"forbidden\")]" if p.codes_import
                    else "[Assertion(expected=True, op=\"exists\", field=\"/msg\")]")
         role_block = role_block.replace("_ROLE_BF_", role_bf)

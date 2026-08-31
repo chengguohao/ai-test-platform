@@ -32,6 +32,22 @@
       </div>
       <div class="toolbar">
         <el-button :icon="Refresh" :loading="loading" @click="refresh">刷新</el-button>
+        <!-- 本次需求完成：把当前实例已评审通过的用例集快照入库到知识库 -->
+        <el-button
+          v-if="selectedRunId"
+          type="success"
+          plain
+          :loading="collecting"
+          @click="collectKnowledge"
+        >
+          <el-icon style="margin-right: 4px"><Collection /></el-icon>本次需求完成
+        </el-button>
+        <el-tooltip placement="top">
+          <template #content>
+            <div>当业务功能测试用例或接口用例评审通过后，<br />点击该按钮可将用例保存到知识库，供后续生成用例时参考。</div>
+          </template>
+          <el-icon class="kb-info-icon"><InfoFilled /></el-icon>
+        </el-tooltip>
         <el-button
           v-if="run && (run.status !== 'success' || canContinueRun)"
           type="primary"
@@ -145,7 +161,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, InfoFilled, Delete, CircleCheckFilled, VideoPlay } from '@element-plus/icons-vue'
 import AnimatedRail from '@/components/AnimatedRail.vue'
 import StageDetail from '@/components/StageDetail.vue'
-import { projectApi, workflowApi, aiApi } from '@/api'
+import { projectApi, workflowApi, aiApi, knowledgeApi } from '@/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -163,6 +179,7 @@ const createDialogVisible = ref(false)
 const templates = ref([])
 const creating = ref(false)
 const deleting = ref(false)
+const collecting = ref(false)
 const newRunForm = reactive({ template_id: null, name: '' })
 
 const run = computed(() => runs.value.find((r) => r.id === selectedRunId.value))
@@ -324,6 +341,36 @@ async function refresh() {
   await loadStages()
 }
 
+/* 「本次需求完成」：把当前实例已评审通过的用例集快照入库到知识库（多次点击=多次独立入库） */
+async function collectKnowledge() {
+  if (!selectedRunId.value) return
+  try {
+    await ElMessageBox.confirm(
+      '确认将该实例已评审通过的业务功能用例 / 接口测试用例保存到知识库吗？',
+      '本次需求完成',
+      { type: 'info', confirmButtonText: '确认入库', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  collecting.value = true
+  try {
+    const r = await knowledgeApi.collect(selectedRunId.value)
+    const miss = (r.missing || []).map((t) => (t === 'api' ? '接口测试用例' : '业务功能用例'))
+    if (r.added > 0) {
+      ElMessage.success(
+        miss.length
+          ? `已入库 ${r.added} 份用例；${miss.join('、')}暂未评审通过，未入库`
+          : `已入库 ${r.added} 份用例到知识库，可到「知识库」页查看`
+      )
+    } else {
+      ElMessage.warning('暂无可入库用例：请先在「生成用例」阶段生成并评审通过业务功能/接口测试用例')
+    }
+  } finally {
+    collecting.value = false
+  }
+}
+
 async function openCreate() {
   templates.value = await workflowApi.templates(route.params.id)
   newRunForm.template_id = templates.value[0]?.id ?? null
@@ -354,7 +401,7 @@ async function confirmDeleteRun() {
   if (!selectedRunId.value) return
   try {
     await ElMessageBox.confirm(
-      `确定删除流程 #${selectedRunId.value}？该实例的阶段进度、用例集、工件文件与执行记录将一并删除，不可恢复。`,
+      `确定删除流程「${runLabel(runs.value.find((r) => r.id === selectedRunId.value))}」？该实例的阶段进度、用例集、工件文件与执行记录将一并删除，不可恢复。`,
       '删除流程实例',
       { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
     )
@@ -411,9 +458,9 @@ function runStatus(s) {
   return { pending: '待处理', running: '进行中', success: '已完成', failed: '失败', returned: '打回' }[s] || s
 }
 
-/* 实例显示名：有名称显示「名称 (#id)」，旧数据无名称回退「流程 #id」 */
+/* 实例显示名：只显示名称；无名称时用项目内序号兜底（不显示全局 #id） */
 function runLabel(r) {
-  return r.name ? `${r.name} (#${r.id})` : `流程 #${r.id}`
+  return r.name || (r.run_no ? `流程 ${r.run_no}` : '流程')
 }
 
 watch(
@@ -447,6 +494,18 @@ onUnmounted(stopAutoRunPolling)
 </script>
 
 <style scoped>
+/* 「本次需求完成」旁的信息提示图标：与按钮同列居中显示 */
+.kb-info-icon {
+  align-self: center;
+  color: var(--text-secondary, #909399);
+  cursor: help;
+  font-size: 15px;
+}
+
+.kb-info-icon:hover {
+  color: var(--primary, #4b3fe3);
+}
+
 .board-head-left {
   display: flex;
   align-items: center;

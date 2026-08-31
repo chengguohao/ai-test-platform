@@ -133,6 +133,24 @@ def _auto_patch(code: str) -> str:
     return code
 
 
+def _patch_roles(code: str, available: list[str]) -> str:
+    """确定性兜底：模块级 pytestmark 里 requires_role('X') 的 X 若未配置角色账号，
+    则从 pytestmark 移除该项。
+
+    原因：requires_role 是 collection 期校验——只要有一个未配置角色，整模块全部用例
+    被 skip（63 条全跳过）。移除后：未配置角色的用例运行时 role_registry[X] 会单独
+    pytest.skip（smartadmin fixture 已有该逻辑），已配置角色用例正常执行，不再全模块跳过。
+    """
+    if not available:
+        return code
+    for role in re.findall(r"requires_role\('([a-z_]+)'\)", code):
+        if role in available:
+            continue
+        # 删除 pytestmark 列表里整行 requires_role 项（含行尾逗号），不留空行/尾逗号问题
+        code = re.sub(rf"^\s*pytest\.mark\.requires_role\('{role}'\),?\s*\n?", "", code, flags=re.M)
+    return code
+
+
 def _gen_code(inputs: dict, evidence: dict | None = None,
               log_hook=None, llm_config: dict | None = None,
               project_engine: dict | None = None, module: str = "") -> tuple[str, str]:
@@ -236,6 +254,8 @@ def generate(db: Session, run_id: int, project_engine: dict, project: str,
         "regenerate": True,
         # 实际可用 fixture 清单（被测系统子目录 conftest 继承链扫描，防 LLM 臆造）
         "available_fixtures": profile.fixtures,
+        # 已配置角色账号的角色键：约束 requires_role / FlowStep role 只允许用这些
+        "available_roles": profile.available_roles,
     }
     if fix_context:
         inputs["fix_context"] = fix_context   # 执行失败后的修复重生成：根因+pytest 日志
@@ -264,6 +284,15 @@ def generate(db: Session, run_id: int, project_engine: dict, project: str,
         _register_log_artifact()
         task_progress.finish(pkey, error=str(e))
         raise
+    # 确定性兜底：移除未配置角色的 requires_role，避免整模块全 skip
+    if profile.available_roles:
+        removed = len(re.findall(r"requires_role\('([a-z_]+)'\)", code)) - len(
+            re.findall(r"requires_role\('([a-z_]+)'\)", _patch_roles(code, profile.available_roles)))
+        code = _patch_roles(code, profile.available_roles)
+        if removed:
+            _log(f"[角色防护] 已移除 {removed} 个未配置角色的 requires_role 标记"
+                 f"（当前可用角色：{', '.join(profile.available_roles)}）；"
+                 f"对应角色用例运行时将单独跳过，不再整模块全 skip")
 
     diff = difflib.unified_diff(
         existing_code.splitlines(), code.splitlines(),

@@ -22,6 +22,8 @@
           :current-node-key="currentFolderId ?? 0"
           :default-expanded-keys="expandedKeys"
           @node-click="onNodeClick"
+          @node-expand="(d) => onNodeToggle(d, true)"
+          @node-collapse="(d) => onNodeToggle(d, false)"
         >
           <template #default="{ data }">
             <span class="tree-node">
@@ -204,6 +206,15 @@ async function loadFolders() {
 function onNodeClick(data) {
   currentFolderId.value = data.id === 0 ? null : data.id
   load()
+}
+
+/** 用户手动展开/收起节点：把状态记入 expandedKeys，文件夹增删改后重载树不丢失 */
+function onNodeToggle(data, expanded) {
+  const id = data.id
+  const set = new Set(expandedKeys.value)
+  if (expanded) set.add(id)
+  else set.delete(id)
+  expandedKeys.value = [...set]
 }
 
 /* ---------------- 文件夹操作 ---------------- */
@@ -392,6 +403,8 @@ function formatDate(s) {
 
 onMounted(async () => {
   await Promise.all([loadFolders(), loadAiModels()])
+  // 首次进入默认展开虚拟根节点「全部项目」（仅这一次；之后展开/收起由用户自己控制并持久化）
+  if (!expandedKeys.value.length) expandedKeys.value = [0]
   await load()
 })
 </script>

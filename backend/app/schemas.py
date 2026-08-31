@@ -64,7 +64,7 @@ class AiModelOut(BaseModel):
 
 # ---- 流程模板 ----
 class StageSpec(BaseModel):
-    type: str                       # requirement/api_doc/case_gen/case_review/auto_gen/execute/skill/mcp/custom
+    type: str                       # requirement/api_doc/case_gen/auto_gen/execute/skill/mcp/custom
     name: str
     enabled: bool = True
     source: str = ""                # upload/paste/url_fetch/mcp/connector
@@ -97,9 +97,23 @@ class RunOut(BaseModel):
     template_id: int
     template_snapshot: list[StageSpec] = []
     name: str = ""
+    run_no: int = 0   # 项目内实例序号（从 1 开始，仅项目内自洽）
     status: str
     current_stage_idx: int
     created_at: datetime
+
+
+# ---- 知识库 ----
+class KnowledgeOut(BaseModel):
+    id: int
+    project_id: int
+    project_name: str = ""
+    case_type: str = ""          # business=业务功能用例 / api=接口测试用例
+    case_set_id: int = 0
+    case_version: int = 0
+    mod_time: str = ""           # 修改时间（源用例集生成时间）
+    content: dict = {}           # 用例树完整快照
+    created_at: datetime         # 保存时间
 
 
 # ---- 阶段状态 ----

@@ -20,6 +20,14 @@ export const projectApi = {
   remove: (id) => http.delete(`/projects/${id}`)
 }
 
+/* ---------------- 知识库 ---------------- */
+export const knowledgeApi = {
+  list: (params) => http.get('/knowledge', { params: params || {} }),
+  remove: (id) => http.delete(`/knowledge/${id}`),
+  /* 看板「本次需求完成」：把当前 run 已评审通过的用例集快照入库 */
+  collect: (runId) => http.post('/knowledge/collect', { run_id: runId })
+}
+
 /* ---------------- 目录树文件夹 ---------------- */
 export const folderApi = {
   tree: () => http.get('/folders'),
@@ -97,8 +105,6 @@ export const aiApi = {
   exportCases: (data) => http.post('/ai/export', data),
   review: (data) => http.post('/ai/review', data),
   regenerate: (data) => http.post('/ai/regenerate', data, { timeout: LLM_TIMEOUT }),
-  importReviewed: (formData) =>
-    http.post('/ai/import-reviewed', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   caseSets: (runId) => http.get(`/ai/case-sets/${runId}`),
   autoGenerate: (data) => http.post('/ai/auto-generate', data, { timeout: LLM_TIMEOUT }),
   runSkill: (data) => http.post('/ai/run-skill', data, { timeout: LLM_TIMEOUT }),

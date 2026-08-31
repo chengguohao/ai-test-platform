@@ -34,7 +34,6 @@ const DESC = {
   requirement: '提交需求资料：上传 / 粘贴 / URL / 对接公司平台',
   api_doc: '提交接口文档；本需求没有新增接口时可跳过',
   case_gen: 'AI 把需求（+接口文档）自动转成测试用例',
-  case_review: '下载 XMind/Excel 评审：打回或人工改后重传',
   auto_gen: 'AI 按已批准用例生成接口自动化脚本',
   execute: '检查环境，自动跑用例，生成 Allure 报告',
   skill: '单独运行一种 AI 能力，结果存为工件',
@@ -59,13 +58,33 @@ const isDanger = computed(() => props.stage.status === 'failed' || props.stage.s
 const statusText = computed(() => STATUS_TEXT[props.stage.status] || props.stage.status || '未知')
 const desc = computed(() => DESC[props.stage.stage_type] || '')
 
-/* 生成用例阶段待评审时的副文案：区分业务/接口（生成了什么就显示什么） */
+/* 生成用例阶段的组合状态文案：按业务/接口两类的生成+评审状态拼装。
+   后端在 meta.case_gen_summary 里写入每类型状态（none=未生成 / pending_review=待评审 / approved=已评审）。
+   未提供摘要（旧数据/兜底）时回退 pending_review 数组逻辑。 */
+const CASE_LABEL = { business: '业务用例', api: '接口用例' }
+const TYPE_STATE_TEXT = {
+  approved: '已评审',
+  pending_review: '待评审',
+  none: '待生成'
+}
 const pendingReviewText = computed(() => {
-  if (props.stage.stage_type !== 'case_gen' || props.stage.status !== 'pending_review') return ''
+  if (props.stage.stage_type !== 'case_gen') return ''
+  if (props.stage.status === 'success') return ''   // 两类都已评审完成：不显示组合文案
+  const summary = props.stage.meta?.case_gen_summary
+  if (summary && (summary.business || summary.api)) {
+    const parts = []
+    for (const t of ['business', 'api']) {
+      const s = summary[t]
+      if (!s) continue
+      parts.push(`${CASE_LABEL[t]}${TYPE_STATE_TEXT[s] || s}`)
+    }
+    return parts.join('，')
+  }
+  // 兜底：旧数据无摘要
+  if (props.stage.status !== 'pending_review') return ''
   const pending = props.stage.meta?.pending_review || []
   if (pending.length === 0) return '用例已生成，待评审'
-  const names = pending.map(t => (t === 'api' ? '接口用例' : '业务功能用例'))
-  return `${names.join('、')}已生成，待评审`
+  return pending.map((t) => `${CASE_LABEL[t]}待评审`).join('，')
 })
 const statusClass = computed(() => props.stage.status || 'pending')
 const cardClass = computed(() => ({

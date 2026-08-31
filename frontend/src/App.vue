@@ -28,6 +28,10 @@
           <el-icon><Connection /></el-icon>
           <span>连接器设置</span>
         </el-menu-item>
+        <el-menu-item index="/knowledge">
+          <el-icon><Collection /></el-icon>
+          <span>知识库</span>
+        </el-menu-item>
         <el-menu-item index="/usage">
           <el-icon><QuestionFilled /></el-icon>
           <span>使用说明</span>
@@ -68,6 +72,7 @@ const pageTitle = computed(() => route.meta?.title || 'AI 测试工作流平台'
 const activeMenu = computed(() => {
   if (route.path === '/usage') return '/usage'
   if (route.path === '/connectors') return '/connectors'
+  if (route.path === '/knowledge') return '/knowledge'
   if (route.path === '/skills') return '/skills'
   if (route.path === '/ai-models') return '/ai-models'
   return '/'

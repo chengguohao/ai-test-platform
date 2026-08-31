@@ -79,8 +79,10 @@ class WorkflowRun(Base):
     project_id: Mapped[int] = mapped_column(Integer, index=True)
     template_id: Mapped[int] = mapped_column(Integer)
     template_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)  # 实例化时的模板快照
-    # 实例名称（用户新建时填写；空则前端回退显示 #id）
+    # 实例名称（用户新建时填写；空则后端自动「第 N 轮流程」）
     name: Mapped[str] = mapped_column(String(128), default="")
+    # 项目内实例序号（从 1 开始，与默认命名「第 N 轮流程」一致；跨项目不连续，仅项目内可读）
+    run_no: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(32), default="pending")  # pending/running/success/failed/returned
     current_stage_idx: Mapped[int] = mapped_column(Integer, default=-1)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
@@ -128,7 +130,7 @@ class ReviewRecord(Base):
     __tablename__ = "review_records"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     run_id: Mapped[int] = mapped_column(Integer, index=True)
-    stage_type: Mapped[str] = mapped_column(String(64), default="case_review")
+    stage_type: Mapped[str] = mapped_column(String(64), default="")   # 关联阶段类型（评审记录所属阶段）
     result: Mapped[str] = mapped_column(String(32))  # approved / returned
     reason: Mapped[str] = mapped_column(Text, default="")
     action: Mapped[str] = mapped_column(String(32), default="")  # regenerate / reupload
@@ -158,3 +160,24 @@ class ConnectorConfig(Base):
     cfg: Mapped[dict] = mapped_column(JSON, default=dict)  # 凭据/URL/解析规则（敏感字段加密存储）
     enabled: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class KnowledgeEntry(Base):
+    """知识库：已评审通过的用例集快照（业务功能用例 / 接口测试用例）。
+
+    看板「本次需求完成」把 run 下各类型最新 approved 用例集复制入库；
+    内容为完整快照（后续原用例集被覆盖/删除不影响知识库）。
+    ref_snapshot 为入库时沉淀的「紧凑参考骨架」，供后续用例生成引用
+    （只含 id/标题/优先级/接口等关键信息，不含步骤详情，省 token）。
+    """
+    __tablename__ = "knowledge_entries"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(Integer, index=True)
+    project_name: Mapped[str] = mapped_column(String(128), default="")   # 项目卡片名称（入库时快照）
+    case_type: Mapped[str] = mapped_column(String(32), default="business")  # business=业务功能用例 / api=接口测试用例
+    case_set_id: Mapped[int] = mapped_column(Integer, default=0)   # 来源用例集 id
+    case_version: Mapped[int] = mapped_column(Integer, default=0)  # 来源用例集版本
+    mod_time: Mapped[str] = mapped_column(String(32), default="")  # 修改时间（用例集生成时间）
+    content: Mapped[dict] = mapped_column(JSON, default=dict)      # 用例树完整快照
+    ref_snapshot: Mapped[dict] = mapped_column(JSON, default=dict) # 紧凑参考骨架（供生成时引用）
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)  # 保存时间

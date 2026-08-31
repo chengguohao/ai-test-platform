@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -291,9 +290,14 @@ def summary(body: SummaryIn, db: Session = Depends(get_db)):
     text = json.dumps(out, ensure_ascii=False, indent=2)
     path = storage.save_text(project, body.run_id, f"requirement_summary_{ts}.json",
                              text, subdir="summary")
+    # 摘要工件版本递增（默认 1，每次都 v1 会导致无法区分第几次生成）
+    max_ver = db.execute(select(models.Artifact.version).where(
+        models.Artifact.run_id == body.run_id,
+        models.Artifact.type == "requirement_summary")).scalars().all()
     db.add(models.Artifact(run_id=body.run_id, stage_type="requirement",
                            type="requirement_summary", name="需求摘要.json",
                            file_path=str(path),
+                           version=max(max_ver, default=0) + 1,
                            source={"source": "skill", "skill": "requirement_summary"}))
     db.commit()
     # 摘要生成完成 -> 自动推进 requirement 阶段为 success（过守卫）并启动下一阶段
@@ -423,18 +427,15 @@ def review(body: ReviewIn, db: Session = Depends(get_db)):
         db.add(models.ReviewRecord(run_id=body.run_id, result="returned",
                                    reason=body.reason, action=body.action,
                                    reviewer=body.reviewer))
-        # 打回闭环：把「生成用例」阶段回退到 returned，把「用例评审」阶段也置 returned，
-        # 这样前端会引导用户回到生成用例阶段重新生成（带 reason 作为上下文）。
+        # 打回闭环：把「生成用例」阶段回退到 returned，前端引导用户回到生成用例阶段按原因重新生成
         from app import models as _m
         from sqlalchemy import select as _sel
-        stages = db.execute(_sel(_m.StageState).where(_m.StageState.run_id == body.run_id)
-                            .order_by(_m.StageState.idx)).scalars().all()
-        for st in stages:
-            if st.stage_type == "case_gen":
-                st.status = "returned"
-                st.meta = {**(st.meta or {}), "return_reason": body.reason}
-            elif st.stage_type == "case_review":
-                st.status = "returned"
+        st_cg = db.execute(_sel(_m.StageState).where(
+            _m.StageState.run_id == body.run_id,
+            _m.StageState.stage_type == "case_gen").limit(1)).scalar_one_or_none()
+        if st_cg:
+            st_cg.status = "returned"
+            st_cg.meta = {**(st_cg.meta or {}), "return_reason": body.reason}
         run = db.get(_m.WorkflowRun, body.run_id)
         if run:
             run.status = "returned"
@@ -461,53 +462,13 @@ def regenerate(body: RegenerateIn, db: Session = Depends(get_db)):
         out = case_gen_svc.generate_cases(db, body.run_id, body.project or f"p{body.run_id}",
                                           evidence=body.evidence, case_type=body.case_type,
                                           llm_config=_run_id_llm_config(db, body.run_id))
-        # 重新生成后：旧流程（含评审阶段）把评审阶段回 pending 等重新评审；新流程回到待评审
+        # 重新生成后同步生成用例阶段：回到待评审（未全通过）或直接推进（全通过）
         from app.api.workflow import sync_case_gen_status
-        from app import models as _m
-        from sqlalchemy import select as _sel
-        for st_ in db.execute(_sel(_m.StageState).where(_m.StageState.run_id == body.run_id)
-                              .order_by(_m.StageState.idx)).scalars().all():
-            if st_.stage_type == "case_review":
-                st_.status = "pending"
-        db.commit()
         sync_case_gen_status(db, body.run_id)
         return {"message": "已按打回原因重新生成", "data": out}
     except Exception as e:  # noqa: BLE001
         mark_stage_status(db, body.run_id, "case_gen", "failed", error=str(e))
         raise HTTPException(400, str(e))
-
-
-@router.post("/import-reviewed")
-async def import_reviewed(
-    run_id: int = Form(...),
-    project: str = Form(""),
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-):
-    """人工修改后重新上传 XMind/Excel → 回读为批准用例集（版本+1）。"""
-    filename = file.filename or ""
-    ext = Path(filename).suffix.lower()
-    data = await file.read()
-    path = storage.save_upload(project or f"p{run_id}", run_id, filename, data, subdir="cases/reviewed")
-    try:
-        tree = case_export.parse_xmind(path) if ext == ".xmind" else case_export.parse_excel(path)
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(422, f"回读解析失败：{e}（请使用标准模板下载后修改）")
-    prev = (db.query(models.CaseSet).filter(models.CaseSet.run_id == run_id)
-            .order_by(models.CaseSet.version.desc()).first())
-    version = (prev.version + 1) if prev else 1
-    cs = models.CaseSet(run_id=run_id, version=version, status="approved",
-                        content=tree, gen_meta={"source": "reupload", "file": filename})
-    db.add(cs)
-    db.add(models.Artifact(run_id=run_id, stage_type="case_review", type="approved_cases",
-                           name=f"批准用例集 v{version}", file_path=str(path), version=version,
-                           source={"source": "reupload", "file": filename}))
-    db.commit()
-    from app.api.workflow import sync_case_gen_status
-    sync_case_gen_status(db, body.run_id)
-    return {"message": "已回读为批准用例集", "case_set_id": cs.id, "version": version,
-            "groups": len(tree.get("groups", [])),
-            "cases": sum(len(g.get("cases", [])) for g in tree.get("groups", []))}
 
 
 @router.get("/case-sets/{run_id}")

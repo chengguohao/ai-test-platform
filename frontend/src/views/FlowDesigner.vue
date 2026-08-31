@@ -169,7 +169,6 @@ const TYPE_NAMES = {
   case_gen: '生成用例',
   skill: 'AI 处理',
   mcp: '平台取数',
-  case_review: '用例评审',
   auto_gen: '自动化生成',
   execute: '执行报告'
 }

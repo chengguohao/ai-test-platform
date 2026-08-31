@@ -18,6 +18,7 @@
 """
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -48,6 +49,7 @@ class SystemProfile:
     markers: list[str] = field(default_factory=list)
     fixtures: list[str] = field(default_factory=list)
     api_base: Path | None = None
+    available_roles: list[str] = field(default_factory=list)   # .env 已配置角色账号的角色键（生成时约束 requires_role）
 
     @property
     def codes_import(self) -> str | None:
@@ -157,6 +159,8 @@ def collect_system_profile(engine: dict, module: str = "") -> SystemProfile:
             prof.codes_var, prof.codes_mod = candidates[0]
     # 角色体系以 fixture 事实为准：conftest 继承链真的提供 role_registry/admin_client 才认为具备
     prof.has_roles = "role_registry" in prof.fixtures and "admin_client" in prof.fixtures
+    # 可用角色：.env SA_ROLES_JSON 里已配置且有密码的角色键（防生成脚本引用未配置角色导致整模块 skip）
+    prof.available_roles = _scan_available_roles(project_dir)
 
     # 主 marker：系统子目录名在注册表内优先；否则从该子目录现存用例反推；再否则 None
     # （None = 执行时不加 -m，靠目录限定收集；绝不能用其它系统的 marker 误过滤）
@@ -165,6 +169,32 @@ def collect_system_profile(engine: dict, module: str = "") -> SystemProfile:
     elif api_base.is_dir():
         prof.marker = _detect_file_marker(api_base)
     return prof
+
+
+def _scan_available_roles(project_dir: Path) -> list[str]:
+    """读取 pytest 工程 .env 的 SA_ROLES_JSON，返回已配置且有密码的角色键。
+
+    与 pytest-bdd/support/fixtures/smartadmin.py::load_sa_roles 同源：
+    未配置时回退单 admin。供生成侧约束 requires_role / FlowStep role 使用，
+    避免生成脚本引用未配置角色导致整模块 skip。
+    """
+    env_file = project_dir / ".env"
+    roles: list[str] = []
+    if env_file.is_file():
+        raw = ""
+        for line in env_file.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = line.strip()
+            if line.startswith("SA_ROLES_JSON="):
+                raw = line.split("=", 1)[1].strip().strip('"').strip("'")
+                break
+        if raw:
+            try:
+                parsed = json.loads(raw)
+                roles = [k for k, v in parsed.items()
+                         if isinstance(v, dict) and (v.get("password") or "").strip()]
+            except Exception:  # noqa: BLE001 解析失败回退单 admin
+                roles = []
+    return roles or ["admin"]
 
 
 def _detect_file_marker(api_base: Path) -> str | None:
