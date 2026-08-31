@@ -1,0 +1,249 @@
+/* ============================================================
+   AI 测试工作流平台 · 全局样式（风格 B 浅色简约）
+   ============================================================ */
+:root {
+  /* 品牌色 */
+  --bg: #f5f6fa;
+  --card: #ffffff;
+  --secondary: #f0f1f6;
+  --primary: #4b3fe3;
+  --primary-light: #eff0ff;
+  --text: #1b1d2a;
+  --text-secondary: #6b7085;
+  --border: rgba(27, 29, 42, 0.1);
+
+  /* 语义色（仅用于状态徽章） */
+  --success: #1dc981;
+  --warning: #efaa17;
+  --danger: #e8463a;
+
+  /* 圆角 */
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --radius-pill: 999px;
+
+  /* 字体 */
+  --font: 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+
+  /* Element Plus 主色覆盖 */
+  --el-color-primary: #4b3fe3;
+  --el-color-primary-light-3: #7c73ea;
+  --el-color-primary-light-5: #a19bf0;
+  --el-color-primary-light-7: #c6c2f7;
+  --el-color-primary-light-8: #d9d6fa;
+  --el-color-primary-light-9: #eff0ff;
+  --el-color-primary-dark-2: #3c32b6;
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 8px;
+  --el-border-radius-round: 999px;
+  --el-text-color-primary: #1b1d2a;
+  --el-text-color-regular: #6b7085;
+  --el-font-family: var(--font);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- 通用卡片 ---------- */
+.panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 20px;
+}
+
+.panel + .panel {
+  margin-top: 16px;
+}
+
+.panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.muted {
+  color: var(--text-secondary);
+}
+
+/* ---------- 通用小标签 ---------- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  line-height: 22px;
+  background: var(--secondary);
+  color: var(--text-secondary);
+}
+
+.pill-primary {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.pill-success {
+  background: rgba(29, 201, 129, 0.12);
+  color: #0aa368;
+}
+
+.pill-danger {
+  background: rgba(232, 70, 58, 0.12);
+  color: var(--danger);
+}
+
+/* ---------- 状态徽章（语义色仅用于徽章） ---------- */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 22px;
+  white-space: nowrap;
+}
+
+.status-badge .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-badge.pending {
+  background: var(--secondary);
+  color: var(--text-secondary);
+}
+
+.status-badge.running {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.status-badge.success {
+  background: rgba(29, 201, 129, 0.14);
+  color: #0aa368;
+}
+
+.status-badge.failed {
+  background: rgba(232, 70, 58, 0.13);
+  color: var(--danger);
+}
+
+.status-badge.returned {
+  background: rgba(232, 70, 58, 0.13);
+  color: var(--danger);
+}
+
+.status-badge.pending-review {
+  background: rgba(230, 162, 60, 0.15);
+  color: #b2761a;
+}
+
+.status-badge.skipped {
+  background: var(--secondary);
+  color: var(--text-secondary);
+}
+
+/* ---------- 页面容器 ---------- */
+.page {
+  padding: 20px 24px 40px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.page-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text);
+}
+
+/* ---------- 工具条 ---------- */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
+/* ---------- 滚动条 ---------- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(27, 29, 42, 0.15);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- 简易代码块 ---------- */
+.code-block {
+  background: var(--secondary);
+  border-radius: var(--radius-control);
+  padding: 10px 12px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 320px;
+  overflow: auto;
+  color: var(--text);
+}
+
+/* 减少动态偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

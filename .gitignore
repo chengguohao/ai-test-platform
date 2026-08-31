@@ -1,0 +1,36 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+htmlcov/
+.coverage
+allure-results/
+allure-report/
+.tox/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/dist2/
+frontend/dist3/
+frontend/.vite/
+
+# Environment (never commit real secrets)
+.env
+.env.local
+
+# Runtime artifacts
+workspaces/
+data/
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db

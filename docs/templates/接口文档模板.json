@@ -1,0 +1,94 @@
+{
+  "api_doc_version": "1.0.0",
+  "module": "{模块英文短名，小写下划线，如 notice}",
+  "title": "{模块中文名}接口文档",
+  "base_url": "{服务前缀，如 / 或 /api}",
+  "_填写说明": "本模板为固定结构，填值后删除所有 _ 开头字段（如本行）。关键规则：1) 所有字段/枚举/错误码直接内联在接口下，禁止用 $ref 间接引用（AI 一次读全，避免漏读字段自造）；2) 字段 name/type/required 必须与需求文档一致；3) role 只能取 auth.role_identifiers 里定义的值；4) 未登录/无权限等通用错误码填到 common_error_codes，模块专属错误码填到接口 business_codes。",
+
+  "envelope": {
+    "_说明": "统一响应信封，所有接口返回格式一致",
+    "ok": "ok",
+    "code": "code",
+    "msg": "msg",
+    "data": "data",
+    "success_code": 0
+  },
+
+  "auth": {
+    "_说明": "除 role=anonymous 的接口外均需登录；登录凭证放在请求头 Authorization",
+    "header": "Authorization",
+    "login_api": "{登录接口，如 POST /login}",
+    "role_identifiers": {
+      "{角色英文标识，如 admin}": "{角色中文名，如 管理员}",
+      "{角色英文标识，如 employee}": "{角色中文名，如 普通员工}"
+    }
+  },
+
+  "enums": [
+    {
+      "name": "{枚举名，如 publish_status}",
+      "description": "{枚举说明，如 公告发布状态}",
+      "values": [
+        { "value": 0, "label": "{枚举标签，如 未发布}" },
+        { "value": 1, "label": "{枚举标签，如 已发布}" }
+      ]
+    }
+  ],
+
+  "common_error_codes": [
+    { "key": "param_error", "code": 40000, "message": "参数校验失败（如必填缺失/格式错误）" },
+    { "key": "not_login", "code": 40100, "message": "未登录或登录已过期" },
+    { "key": "no_permission", "code": 40300, "message": "无权限访问" }
+  ],
+
+  "interfaces": [
+    {
+      "id": "{接口编号，如 IF-01}",
+      "name": "{接口名称，如 创建公告}",
+      "role": "{访问角色：admin / employee / anonymous}",
+      "method": "POST",
+      "path": "{接口路径，如 /oa/notice/add}",
+      "summary": "{一句话说明该接口做什么、成功后返回什么（如 创建公告，成功后 data=null，需用分页查询反查 noticeId）}",
+
+      "request": {
+        "content_type": "application/json",
+        "path_params": [
+          { "name": "{路径参数名}", "type": "long", "required": true, "description": "{说明}" }
+        ],
+        "query_params": [
+          { "name": "{查询参数名}", "type": "string", "required": false, "description": "{说明}" }
+        ],
+        "headers": [],
+        "body": [
+          {
+            "name": "{字段名，如 title}",
+            "type": "string",
+            "required": true,
+            "length": "≤200",
+            "enum": null,
+            "description": "{字段说明}"
+          }
+        ]
+      },
+
+      "response": {
+        "data_type": "{null / 简单类型 / 对象 / 数组}",
+        "description": "{成功时 data 的内容说明}",
+        "success_fields": [
+          {
+            "name": "{返回字段名，如 list}",
+            "type": "array<{元素类型，如 NoticeVO}>",
+            "description": "{说明，含嵌套字段时在下面 fields 展开}"
+          }
+        ],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "{该接口会出现的失败场景}" }
+        ]
+      },
+
+      "business_codes": {
+        "{模块专属错误码 key，如 delete_not_exist}": { "code": 10010, "message": "{错误说明，如 公告不存在}" }
+      }
+    }
+  ]
+}

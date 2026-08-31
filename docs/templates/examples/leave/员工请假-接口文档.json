@@ -1,0 +1,403 @@
+{
+  "api_doc_version": "1.0.0",
+  "module": "leave",
+  "title": "员工请假模块接口文档",
+  "base_url": "/api",
+  "_填写说明": "本文件为员工请假模块固定结构接口文档，字段/枚举/错误码全部内联，禁止用 $ref 间接引用；字段 name/type/required 必须与《员工请假-需求文档.md》一致；role 只取 auth.role_identifiers 里定义的值；通用错误码在 common_error_codes，模块专属错误码在接口 business_codes。",
+
+  "envelope": {
+    "_说明": "统一响应信封，所有接口返回格式一致",
+    "ok": "ok",
+    "code": "code",
+    "msg": "msg",
+    "data": "data",
+    "success_code": 0
+  },
+
+  "auth": {
+    "_说明": "除 role=anonymous 的接口外均需登录；登录凭证放在请求头 Authorization",
+    "header": "Authorization",
+    "login_api": "POST /login",
+    "role_identifiers": {
+      "employee": "员工",
+      "manager": "部门主管",
+      "hr_admin": "人事专员"
+    }
+  },
+
+  "enums": [
+    {
+      "name": "leave_status",
+      "description": "请假申请状态",
+      "values": [
+        { "value": 0, "label": "待审批" },
+        { "value": 1, "label": "已通过" },
+        { "value": 2, "label": "已驳回" },
+        { "value": 3, "label": "已撤回" }
+      ]
+    },
+    {
+      "name": "approve_action",
+      "description": "审批动作",
+      "values": [
+        { "value": 1, "label": "通过" },
+        { "value": 2, "label": "驳回" }
+      ]
+    },
+    {
+      "name": "leave_type",
+      "description": "请假类型",
+      "values": [
+        { "value": 1, "label": "事假" },
+        { "value": 2, "label": "病假" },
+        { "value": 3, "label": "年假" },
+        { "value": 4, "label": "调休" }
+      ]
+    }
+  ],
+
+  "common_error_codes": [
+    { "key": "param_error", "code": 40000, "message": "参数校验失败（如必填缺失/格式错误）" },
+    { "key": "not_login", "code": 40100, "message": "未登录或登录已过期" },
+    { "key": "no_permission", "code": 40300, "message": "无权限访问" }
+  ],
+
+  "interfaces": [
+    {
+      "id": "IF-01",
+      "name": "提交请假申请",
+      "role": "employee",
+      "method": "POST",
+      "path": "/leave/apply",
+      "summary": "员工提交请假申请，成功后 data=null，服务端生成申请单号 applyNo（格式 LV+yyyyMMdd+3 位序号），状态为待审批（0）",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": [
+          { "name": "leaveTypeId", "type": "long", "required": true, "enum": "leave_type", "description": "请假类型ID（1事假/2病假/3年假/4调休）" },
+          { "name": "startTime", "type": "string", "required": true, "length": "yyyy-MM-dd HH:mm:ss", "enum": null, "description": "开始时间" },
+          { "name": "endTime", "type": "string", "required": true, "length": "yyyy-MM-dd HH:mm:ss", "enum": null, "description": "结束时间，必须晚于 startTime" },
+          { "name": "reason", "type": "string", "required": true, "length": "≤500", "enum": null, "description": "请假原因" },
+          { "name": "attachment", "type": "string", "required": false, "length": "≤1000", "enum": null, "description": "附件文件 URL" }
+        ]
+      },
+      "response": {
+        "data_type": "null",
+        "description": "提交成功 data=null，需用我的请假列表反查 applyNo",
+        "success_fields": [],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "必填缺失或格式错误" },
+          { "key": "time_invalid", "code": 10025, "message": "结束时间不能早于或等于开始时间" },
+          { "key": "leave_type_not_exist", "code": 10026, "message": "请假类型不存在" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "非员工角色调用" }
+        ]
+      },
+      "business_codes": {
+        "time_invalid": { "code": 10025, "message": "结束时间不能早于或等于开始时间" },
+        "leave_type_not_exist": { "code": 10026, "message": "请假类型不存在" }
+      }
+    },
+
+    {
+      "id": "IF-02",
+      "name": "我的请假列表",
+      "role": "employee",
+      "method": "GET",
+      "path": "/leave/my/list",
+      "summary": "员工分页查询自己的请假记录，支持按状态过滤，仅返回本人数据",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [
+          { "name": "pageNum", "type": "int", "required": true, "description": "页码，≥1" },
+          { "name": "pageSize", "type": "int", "required": true, "description": "每页条数，≥1" },
+          { "name": "status", "type": "int", "required": false, "enum": "leave_status", "description": "状态过滤（0/1/2/3）" }
+        ],
+        "headers": [],
+        "body": []
+      },
+      "response": {
+        "data_type": "对象",
+        "description": "分页结果，含 total、list",
+        "success_fields": [
+          { "name": "total", "type": "long", "description": "总条数" },
+          { "name": "list", "type": "array<LeaveApplyVO>", "description": "申请列表，元素含 applyNo、employeeName、deptName、leaveTypeName、startTime、endTime、durationDays、status、createTime" }
+        ],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "分页参数非法" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "非员工角色调用" }
+        ]
+      },
+      "business_codes": {}
+    },
+
+    {
+      "id": "IF-03",
+      "name": "请假详情",
+      "role": "employee",
+      "method": "GET",
+      "path": "/leave/my/detail",
+      "summary": "按 applyNo 查询请假详情，含审批结果（通过时含 approverName/approveTime，驳回时另含 approveComment），仅本人可查",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [
+          { "name": "applyNo", "type": "string", "required": true, "description": "申请单号" }
+        ],
+        "headers": [],
+        "body": []
+      },
+      "response": {
+        "data_type": "对象",
+        "description": "完整详情，字段含 applyNo、leaveTypeName、startTime、endTime、durationDays、reason、attachment、status、createTime、approverName、approveTime、approveComment、cancelReason",
+        "success_fields": [
+          { "name": "applyNo", "type": "string", "description": "申请单号" },
+          { "name": "leaveTypeName", "type": "string", "description": "请假类型中文名" },
+          { "name": "startTime", "type": "string", "description": "开始时间" },
+          { "name": "endTime", "type": "string", "description": "结束时间" },
+          { "name": "durationDays", "type": "number", "description": "时长（天，支持小数）" },
+          { "name": "reason", "type": "string", "description": "请假原因" },
+          { "name": "attachment", "type": "string", "description": "附件 URL，可为空" },
+          { "name": "status", "type": "int", "enum": "leave_status", "description": "状态" },
+          { "name": "createTime", "type": "string", "description": "申请时间" },
+          { "name": "approverName", "type": "string", "description": "审批人，未审批为空" },
+          { "name": "approveTime", "type": "string", "description": "审批时间，未审批为空" },
+          { "name": "approveComment", "type": "string", "description": "审批意见，驳回时展示" },
+          { "name": "cancelReason", "type": "string", "description": "撤回原因，已撤回时展示" }
+        ],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "参数缺失" },
+          { "key": "apply_not_exist", "code": 10020, "message": "请假申请不存在" },
+          { "key": "no_operation_right", "code": 10024, "message": "无权查看他人申请" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "非员工角色调用" }
+        ]
+      },
+      "business_codes": {
+        "apply_not_exist": { "code": 10020, "message": "请假申请不存在" },
+        "no_operation_right": { "code": 10024, "message": "无权操作该申请" }
+      }
+    },
+
+    {
+      "id": "IF-04",
+      "name": "撤回请假申请",
+      "role": "employee",
+      "method": "POST",
+      "path": "/leave/my/cancel",
+      "summary": "员工撤回自己「待审批」状态的申请，成功后 data=null，状态变为已撤回（3）",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": [
+          { "name": "applyNo", "type": "string", "required": true, "length": null, "enum": null, "description": "申请单号" },
+          { "name": "cancelReason", "type": "string", "required": true, "length": "≤200", "enum": null, "description": "撤回原因" }
+        ]
+      },
+      "response": {
+        "data_type": "null",
+        "description": "撤回成功 data=null",
+        "success_fields": [],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "参数缺失" },
+          { "key": "apply_not_exist", "code": 10020, "message": "请假申请不存在" },
+          { "key": "cancel_not_allowed", "code": 10021, "message": "当前状态不可撤回（仅待审批可撤回）" },
+          { "key": "no_operation_right", "code": 10024, "message": "非本人申请不可撤回" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "非员工角色调用" }
+        ]
+      },
+      "business_codes": {
+        "apply_not_exist": { "code": 10020, "message": "请假申请不存在" },
+        "cancel_not_allowed": { "code": 10021, "message": "当前状态不可撤回" },
+        "no_operation_right": { "code": 10024, "message": "无权操作该申请" }
+      }
+    },
+
+    {
+      "id": "IF-05",
+      "name": "审批待办列表",
+      "role": "manager",
+      "method": "GET",
+      "path": "/leave/approve/todo",
+      "summary": "部门主管分页查询本部门员工提交且状态为待审批（0）的请假申请，支持申请人/请假类型/状态过滤",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [
+          { "name": "pageNum", "type": "int", "required": true, "description": "页码，≥1" },
+          { "name": "pageSize", "type": "int", "required": true, "description": "每页条数，≥1" },
+          { "name": "employeeName", "type": "string", "required": false, "description": "申请人姓名模糊查询" },
+          { "name": "leaveTypeId", "type": "long", "required": false, "enum": "leave_type", "description": "请假类型过滤" },
+          { "name": "status", "type": "int", "required": false, "enum": "leave_status", "description": "状态过滤" }
+        ],
+        "headers": [],
+        "body": []
+      },
+      "response": {
+        "data_type": "对象",
+        "description": "分页结果，含 total、list",
+        "success_fields": [
+          { "name": "total", "type": "long", "description": "总条数" },
+          { "name": "list", "type": "array<LeaveApplyVO>", "description": "申请列表，元素含 applyNo、employeeName、deptName、leaveTypeName、startTime、endTime、durationDays、status" }
+        ],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "分页参数非法" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "非主管角色调用" }
+        ]
+      },
+      "business_codes": {}
+    },
+
+    {
+      "id": "IF-06",
+      "name": "审批操作",
+      "role": "manager",
+      "method": "POST",
+      "path": "/leave/approve",
+      "summary": "部门主管审批请假申请：通过后状态变已通过（1），驳回后变已驳回（2），记录审批人/时间/意见，成功返回 data=null",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": [
+          { "name": "applyNo", "type": "string", "required": true, "length": null, "enum": null, "description": "申请单号" },
+          { "name": "approveAction", "type": "int", "required": true, "enum": "approve_action", "description": "审批动作（1通过/2驳回）" },
+          { "name": "approveComment", "type": "string", "required": false, "length": "≤500", "enum": null, "description": "审批意见，驳回时必填" }
+        ]
+      },
+      "response": {
+        "data_type": "null",
+        "description": "审批成功 data=null",
+        "success_fields": [],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "参数缺失" },
+          { "key": "apply_not_exist", "code": 10020, "message": "请假申请不存在" },
+          { "key": "status_invalid", "code": 10022, "message": "当前状态不可审批（非待审批）" },
+          { "key": "approve_comment_required", "code": 10023, "message": "驳回必须填写审批意见" },
+          { "key": "no_operation_right", "code": 10024, "message": "非本部门申请不可审批" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "非主管角色调用" }
+        ]
+      },
+      "business_codes": {
+        "apply_not_exist": { "code": 10020, "message": "请假申请不存在" },
+        "status_invalid": { "code": 10022, "message": "当前状态不可审批" },
+        "approve_comment_required": { "code": 10023, "message": "驳回必须填写审批意见" },
+        "no_operation_right": { "code": 10024, "message": "无权操作该申请" }
+      }
+    },
+
+    {
+      "id": "IF-07",
+      "name": "审批已办列表",
+      "role": "manager",
+      "method": "GET",
+      "path": "/leave/approve/done",
+      "summary": "部门主管分页查询自己已审批的记录（状态=已通过或已驳回），含审批意见与审批时间",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [
+          { "name": "pageNum", "type": "int", "required": true, "description": "页码，≥1" },
+          { "name": "pageSize", "type": "int", "required": true, "description": "每页条数，≥1" },
+          { "name": "employeeName", "type": "string", "required": false, "description": "申请人姓名模糊查询" },
+          { "name": "status", "type": "int", "required": false, "enum": "leave_status", "description": "状态过滤" }
+        ],
+        "headers": [],
+        "body": []
+      },
+      "response": {
+        "data_type": "对象",
+        "description": "分页结果，含 total、list",
+        "success_fields": [
+          { "name": "total", "type": "long", "description": "总条数" },
+          { "name": "list", "type": "array<LeaveApplyVO>", "description": "已办列表，元素含 applyNo、employeeName、deptName、leaveTypeName、startTime、endTime、durationDays、status、approveTime、approveComment" }
+        ],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "分页参数非法" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "非主管角色调用" }
+        ]
+      },
+      "business_codes": {}
+    },
+
+    {
+      "id": "IF-08",
+      "name": "全公司请假记录查询",
+      "role": "hr_admin",
+      "method": "GET",
+      "path": "/leave/admin/list",
+      "summary": "人事专员分页查询全公司请假记录，支持部门/状态/申请时间范围过滤",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [
+          { "name": "pageNum", "type": "int", "required": true, "description": "页码，≥1" },
+          { "name": "pageSize", "type": "int", "required": true, "description": "每页条数，≥1" },
+          { "name": "deptName", "type": "string", "required": false, "description": "部门名称" },
+          { "name": "status", "type": "int", "required": false, "enum": "leave_status", "description": "状态过滤" },
+          { "name": "startDate", "type": "string", "required": false, "length": "yyyy-MM-dd", "enum": null, "description": "申请时间范围起" },
+          { "name": "endDate", "type": "string", "required": false, "length": "yyyy-MM-dd", "enum": null, "description": "申请时间范围止" }
+        ],
+        "headers": [],
+        "body": []
+      },
+      "response": {
+        "data_type": "对象",
+        "description": "分页结果，含 total、list",
+        "success_fields": [
+          { "name": "total", "type": "long", "description": "总条数" },
+          { "name": "list", "type": "array<LeaveApplyVO>", "description": "请假记录，元素含 applyNo、employeeName、deptName、leaveTypeName、startTime、endTime、durationDays、status、createTime" }
+        ],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "分页参数非法或日期格式错误" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "非人事专员角色调用" }
+        ]
+      },
+      "business_codes": {}
+    },
+
+    {
+      "id": "IF-09",
+      "name": "请假时长统计",
+      "role": "hr_admin",
+      "method": "GET",
+      "path": "/leave/admin/statistics",
+      "summary": "人事专员按部门统计指定时间范围内已通过（status=1）申请的请假时长聚合值",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [
+          { "name": "startDate", "type": "string", "required": true, "length": "yyyy-MM-dd", "enum": null, "description": "统计开始日期" },
+          { "name": "endDate", "type": "string", "required": true, "length": "yyyy-MM-dd", "enum": null, "description": "统计结束日期" }
+        ],
+        "headers": [],
+        "body": []
+      },
+      "response": {
+        "data_type": "数组",
+        "description": "按部门聚合的统计列表",
+        "success_fields": [
+          { "name": "list", "type": "array<DeptStatVO>", "description": "元素含 deptName、totalDays、applyCount" }
+        ],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "参数缺失或日期格式错误" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "非人事专员角色调用" }
+        ]
+      },
+      "business_codes": {}
+    }
+  ]
+}

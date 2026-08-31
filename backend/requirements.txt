@@ -1,0 +1,17 @@
+# AI 测试工作流平台 · 后端依赖
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0
+pydantic>=2.7
+pydantic-settings>=2.3
+python-dotenv>=1.0
+pyyaml>=6.0
+jsonschema>=4.20       # Skill 输出契约（JSON Schema）校验
+openpyxl>=3.1
+httpx>=0.27
+openai>=1.40          # OpenAI 兼容大模型 API（DeepSeek 等）
+python-docx>=1.1      # 需求 docx 正文/表格机械抽取（内嵌图走 zipfile，无需额外依赖）
+# mcp 客户端（可选：注册 MCP Server 接入外部自研平台时启用）
+mcp>=1.2
+# 测试执行依赖（executor 子进程复用 pytest-bdd 的工具链，这里仅用于本地单元冒烟）
+pytest>=8.0

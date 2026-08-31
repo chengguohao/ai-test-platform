@@ -1,0 +1,19 @@
+
+[project]
+name = "pytest-bdd"
+version = "0.1.0"
+description = "pytest + pytest-bdd 测试框架（当前对接 SmartAdmin 管理系统）"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra --strict-markers --tb=line -s"
+markers = [
+    "api: 接口/集成测试",
+    "acceptance: 验收测试 (pytest-bdd)",
+    "smoke: 冒烟用例，发布前快速验证",
+    "slow: 慢速用例，默认跳过",
+    "smartadmin: SmartAdmin 项目（当前唯一被测系统）",
+    "requires_role: 多角色用例，标注所需角色键（admin/reporter/auditor），未配置账号时自动 SKIP",
+]

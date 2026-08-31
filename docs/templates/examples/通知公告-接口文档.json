@@ -1,0 +1,435 @@
+{
+  "api_doc_version": "1.0.0",
+  "module": "notice",
+  "title": "通知公告接口文档",
+  "base_url": "/",
+
+  "envelope": {
+    "_说明": "统一响应信封：{ ok, code, msg, data }，业务成功 code=0",
+    "ok": "ok",
+    "code": "code",
+    "msg": "msg",
+    "data": "data",
+    "success_code": 0
+  },
+
+  "auth": {
+    "_说明": "除 role=anonymous 的接口外均需登录；登录凭证放在请求头 Authorization",
+    "header": "Authorization",
+    "login_api": "POST /login",
+    "role_identifiers": {
+      "admin": "管理员",
+      "employee": "普通员工"
+    }
+  },
+
+  "enums": [
+    {
+      "name": "all_visible",
+      "description": "是否全部可见",
+      "values": [
+        { "value": 0, "label": "仅可见范围" },
+        { "value": 1, "label": "全部可见" }
+      ]
+    },
+    {
+      "name": "scheduled_publish",
+      "description": "是否定时发布",
+      "values": [
+        { "value": 0, "label": "不定时" },
+        { "value": 1, "label": "定时" }
+      ]
+    },
+    {
+      "name": "publish_status",
+      "description": "公告发布状态（查询结果中体现）",
+      "values": [
+        { "value": 0, "label": "未发布" },
+        { "value": 1, "label": "已发布" }
+      ]
+    }
+  ],
+
+  "common_error_codes": [
+    { "key": "param_error", "code": 40000, "message": "参数校验失败（必填缺失/格式错误/分页参数非法）" },
+    { "key": "not_login", "code": 40100, "message": "未登录或登录已过期" },
+    { "key": "no_permission", "code": 40300, "message": "无权限访问" }
+  ],
+
+  "interfaces": [
+    {
+      "id": "IF-01",
+      "name": "创建公告",
+      "role": "admin",
+      "method": "POST",
+      "path": "/oa/notice/add",
+      "summary": "管理端创建一条公告；成功后 data=null，需用分页查询反查 noticeId",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": [
+          { "name": "title", "type": "string", "required": true, "length": "≤200", "enum": null, "description": "公告标题" },
+          { "name": "noticeTypeId", "type": "long", "required": true, "length": null, "enum": null, "description": "公告类型ID" },
+          { "name": "allVisibleFlag", "type": "boolean", "required": true, "length": null, "enum": "all_visible", "description": "是否全部可见" },
+          { "name": "scheduledPublishFlag", "type": "boolean", "required": true, "length": null, "enum": "scheduled_publish", "description": "是否定时发布" },
+          { "name": "publishTime", "type": "string", "required": true, "length": "yyyy-MM-dd HH:mm:ss", "enum": null, "description": "发布时间" },
+          { "name": "contentText", "type": "string", "required": true, "length": null, "enum": null, "description": "纯文本内容" },
+          { "name": "contentHtml", "type": "string", "required": true, "length": null, "enum": null, "description": "HTML 内容" },
+          { "name": "attachment", "type": "string", "required": false, "length": "≤1000", "enum": null, "description": "附件" },
+          { "name": "author", "type": "string", "required": true, "length": null, "enum": null, "description": "作者" },
+          { "name": "source", "type": "string", "required": true, "length": null, "enum": null, "description": "来源" },
+          { "name": "documentNumber", "type": "string", "required": false, "length": null, "enum": null, "description": "文号" }
+        ]
+      },
+      "response": {
+        "data_type": "null",
+        "description": "成功：ok=true, code=0, data=null",
+        "success_fields": [],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "标题为空/必填缺失/长度超限" },
+          { "key": "not_login", "code": 40100, "message": "未登录" }
+        ]
+      },
+      "business_codes": {}
+    },
+    {
+      "id": "IF-02",
+      "name": "管理端分页查询公告",
+      "role": "admin",
+      "method": "POST",
+      "path": "/oa/notice/query",
+      "summary": "管理端分页查询公告列表，支持按标题关键字与类型过滤",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": [
+          { "name": "pageNum", "type": "int", "required": true, "length": "≥1", "enum": null, "description": "页码" },
+          { "name": "pageSize", "type": "int", "required": true, "length": "≥1", "enum": null, "description": "每页条数" },
+          { "name": "keywords", "type": "string", "required": false, "length": null, "enum": null, "description": "标题关键字" },
+          { "name": "noticeTypeId", "type": "long", "required": false, "length": null, "enum": null, "description": "公告类型过滤" }
+        ]
+      },
+      "response": {
+        "data_type": "object",
+        "description": "data = PageResult { total:int, list: NoticeVO[] }",
+        "success_fields": [
+          { "name": "total", "type": "int", "description": "总条数" },
+          { "name": "list", "type": "array<NoticeVO>", "description": "公告列表，每条含 noticeId、title、noticeTypeId、publishTime、allVisibleFlag、scheduledPublishFlag" }
+        ],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "分页参数非法（pageNum/pageSize<1）" },
+          { "key": "not_login", "code": 40100, "message": "未登录" }
+        ]
+      },
+      "business_codes": {}
+    },
+    {
+      "id": "IF-03",
+      "name": "获取公告修改回显数据",
+      "role": "admin",
+      "method": "GET",
+      "path": "/oa/notice/getUpdateVO/{noticeId}",
+      "summary": "修改前获取公告回显数据，data 为 NoticeUpdateFormVO（创建字段 + noticeId）",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [
+          { "name": "noticeId", "type": "long", "required": true, "description": "公告ID" }
+        ],
+        "query_params": [],
+        "headers": [],
+        "body": []
+      },
+      "response": {
+        "data_type": "object",
+        "description": "data = NoticeUpdateFormVO：包含 noticeId 与 title、noticeTypeId、allVisibleFlag、scheduledPublishFlag、publishTime、contentText、contentHtml、attachment、author、source、documentNumber",
+        "success_fields": [
+          { "name": "noticeId", "type": "long", "description": "公告ID" },
+          { "name": "title", "type": "string", "description": "公告标题" }
+        ],
+        "error_codes": [
+          { "key": "not_login", "code": 40100, "message": "未登录" }
+        ]
+      },
+      "business_codes": {}
+    },
+    {
+      "id": "IF-04",
+      "name": "修改公告",
+      "role": "admin",
+      "method": "POST",
+      "path": "/oa/notice/update",
+      "summary": "修改公告，请求体 = 创建字段 + noticeId；成功后 data=null",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": [
+          { "name": "noticeId", "type": "long", "required": true, "length": null, "enum": null, "description": "公告ID（必填）" },
+          { "name": "title", "type": "string", "required": true, "length": "≤200", "enum": null, "description": "公告标题" },
+          { "name": "noticeTypeId", "type": "long", "required": true, "length": null, "enum": null, "description": "公告类型ID" },
+          { "name": "allVisibleFlag", "type": "boolean", "required": true, "length": null, "enum": "all_visible", "description": "是否全部可见" },
+          { "name": "scheduledPublishFlag", "type": "boolean", "required": true, "length": null, "enum": "scheduled_publish", "description": "是否定时发布" },
+          { "name": "publishTime", "type": "string", "required": true, "length": "yyyy-MM-dd HH:mm:ss", "enum": null, "description": "发布时间" },
+          { "name": "contentText", "type": "string", "required": true, "length": null, "enum": null, "description": "纯文本内容" },
+          { "name": "contentHtml", "type": "string", "required": true, "length": null, "enum": null, "description": "HTML 内容" },
+          { "name": "attachment", "type": "string", "required": false, "length": "≤1000", "enum": null, "description": "附件" },
+          { "name": "author", "type": "string", "required": true, "length": null, "enum": null, "description": "作者" },
+          { "name": "source", "type": "string", "required": true, "length": null, "enum": null, "description": "来源" },
+          { "name": "documentNumber", "type": "string", "required": false, "length": null, "enum": null, "description": "文号" }
+        ]
+      },
+      "response": {
+        "data_type": "null",
+        "description": "成功：ok=true, code=0, data=null",
+        "success_fields": [],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "参数校验失败" },
+          { "key": "not_login", "code": 40100, "message": "未登录" }
+        ]
+      },
+      "business_codes": {}
+    },
+    {
+      "id": "IF-05",
+      "name": "删除公告",
+      "role": "admin",
+      "method": "GET",
+      "path": "/oa/notice/delete/{noticeId}",
+      "summary": "按公告ID删除；删除不存在的公告返回业务失败 delete_not_exist",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [
+          { "name": "noticeId", "type": "long", "required": true, "description": "公告ID" }
+        ],
+        "query_params": [],
+        "headers": [],
+        "body": []
+      },
+      "response": {
+        "data_type": "null",
+        "description": "成功：ok=true, code=0, data=null；失败：ok=false, code=delete_not_exist",
+        "success_fields": [],
+        "error_codes": [
+          { "key": "delete_not_exist", "code": 10010, "message": "公告不存在" },
+          { "key": "not_login", "code": 40100, "message": "未登录" }
+        ]
+      },
+      "business_codes": {
+        "delete_not_exist": { "code": 10010, "message": "公告不存在" }
+      }
+    },
+    {
+      "id": "IF-06",
+      "name": "获取全部公告类型",
+      "role": "admin",
+      "method": "GET",
+      "path": "/oa/noticeType/getAll",
+      "summary": "获取全部公告类型列表",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": []
+      },
+      "response": {
+        "data_type": "array",
+        "description": "data = NoticeTypeVO[]，每条 { noticeTypeId, name }",
+        "success_fields": [
+          { "name": "noticeTypeId", "type": "long", "description": "公告类型ID" },
+          { "name": "name", "type": "string", "description": "类型名称" }
+        ],
+        "error_codes": [
+          { "key": "not_login", "code": 40100, "message": "未登录" }
+        ]
+      },
+      "business_codes": {}
+    },
+    {
+      "id": "IF-07",
+      "name": "新增公告类型",
+      "role": "admin",
+      "method": "GET",
+      "path": "/oa/noticeType/add/{name}",
+      "summary": "按名称新增公告类型，成功后 data=null",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [
+          { "name": "name", "type": "string", "required": true, "description": "类型名称" }
+        ],
+        "query_params": [],
+        "headers": [],
+        "body": []
+      },
+      "response": {
+        "data_type": "null",
+        "description": "成功：ok=true, code=0, data=null",
+        "success_fields": [],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "名称为空" },
+          { "key": "not_login", "code": 40100, "message": "未登录" }
+        ]
+      },
+      "business_codes": {}
+    },
+    {
+      "id": "IF-08",
+      "name": "修改公告类型",
+      "role": "admin",
+      "method": "GET",
+      "path": "/oa/noticeType/update/{noticeTypeId}/{name}",
+      "summary": "按类型ID与名称修改公告类型，成功后 data=null",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [
+          { "name": "noticeTypeId", "type": "long", "required": true, "description": "公告类型ID" },
+          { "name": "name", "type": "string", "required": true, "description": "新的类型名称" }
+        ],
+        "query_params": [],
+        "headers": [],
+        "body": []
+      },
+      "response": {
+        "data_type": "null",
+        "description": "成功：ok=true, code=0, data=null",
+        "success_fields": [],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "参数校验失败" },
+          { "key": "not_login", "code": 40100, "message": "未登录" }
+        ]
+      },
+      "business_codes": {}
+    },
+    {
+      "id": "IF-09",
+      "name": "删除公告类型",
+      "role": "admin",
+      "method": "GET",
+      "path": "/oa/noticeType/delete/{noticeTypeId}",
+      "summary": "按类型ID删除公告类型；删除被公告引用的类型返回业务失败 type_ref_error",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [
+          { "name": "noticeTypeId", "type": "long", "required": true, "description": "公告类型ID" }
+        ],
+        "query_params": [],
+        "headers": [],
+        "body": []
+      },
+      "response": {
+        "data_type": "null",
+        "description": "成功：ok=true, code=0, data=null；失败：ok=false, code=type_ref_error",
+        "success_fields": [],
+        "error_codes": [
+          { "key": "type_ref_error", "code": 10011, "message": "该类型已被公告引用，无法删除" },
+          { "key": "not_login", "code": 40100, "message": "未登录" }
+        ]
+      },
+      "business_codes": {
+        "type_ref_error": { "code": 10011, "message": "该类型已被公告引用，无法删除" }
+      }
+    },
+    {
+      "id": "IF-10",
+      "name": "员工分页查询可见公告",
+      "role": "employee",
+      "method": "POST",
+      "path": "/oa/notice/employee/query",
+      "summary": "员工分页查询自己可见范围内且已发布的公告",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": [
+          { "name": "pageNum", "type": "int", "required": true, "length": "≥1", "enum": null, "description": "页码" },
+          { "name": "pageSize", "type": "int", "required": true, "length": "≥1", "enum": null, "description": "每页条数" },
+          { "name": "title", "type": "string", "required": false, "length": null, "enum": null, "description": "标题关键字（可选）" }
+        ]
+      },
+      "response": {
+        "data_type": "object",
+        "description": "data = PageResult { total:int, list: NoticeEmployeeVO[] }，每条含 noticeId、title、publishTime",
+        "success_fields": [
+          { "name": "total", "type": "int", "description": "总条数" },
+          { "name": "list", "type": "array<NoticeEmployeeVO>", "description": "可见公告列表" }
+        ],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "分页参数非法" },
+          { "key": "not_login", "code": 40100, "message": "未登录" }
+        ]
+      },
+      "business_codes": {}
+    },
+    {
+      "id": "IF-11",
+      "name": "员工查看公告详情",
+      "role": "employee",
+      "method": "GET",
+      "path": "/oa/notice/employee/view/{noticeId}",
+      "summary": "员工查看公告详情，阅读后自动记录阅读记录；访问不可见公告返回业务失败",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [
+          { "name": "noticeId", "type": "long", "required": true, "description": "公告ID" }
+        ],
+        "query_params": [],
+        "headers": [],
+        "body": []
+      },
+      "response": {
+        "data_type": "object",
+        "description": "data = NoticeDetailVO { title, contentText, contentHtml, publishTime, author }",
+        "success_fields": [
+          { "name": "title", "type": "string", "description": "公告标题" },
+          { "name": "contentText", "type": "string", "description": "纯文本内容" },
+          { "name": "contentHtml", "type": "string", "description": "HTML 内容" },
+          { "name": "publishTime", "type": "string", "description": "发布时间" },
+          { "name": "author", "type": "string", "description": "作者" }
+        ],
+        "error_codes": [
+          { "key": "no_permission", "code": 40300, "message": "无权限查看该公告" },
+          { "key": "not_login", "code": 40100, "message": "未登录" }
+        ]
+      },
+      "business_codes": {}
+    },
+    {
+      "id": "IF-12",
+      "name": "查询公告阅读记录",
+      "role": "admin",
+      "method": "POST",
+      "path": "/oa/notice/employee/queryViewRecord",
+      "summary": "管理员分页查询某公告的阅读记录",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": [
+          { "name": "noticeId", "type": "long", "required": true, "length": null, "enum": null, "description": "公告ID" },
+          { "name": "pageNum", "type": "int", "required": true, "length": "≥1", "enum": null, "description": "页码" },
+          { "name": "pageSize", "type": "int", "required": true, "length": "≥1", "enum": null, "description": "每页条数" }
+        ]
+      },
+      "response": {
+        "data_type": "object",
+        "description": "data = PageResult { total:int, list: ViewRecordVO[] }，每条含 viewRecordId、noticeId、employeeName、viewTime",
+        "success_fields": [
+          { "name": "total", "type": "int", "description": "总条数" },
+          { "name": "list", "type": "array<ViewRecordVO>", "description": "阅读记录列表" }
+        ],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "分页参数非法" },
+          { "key": "not_login", "code": 40100, "message": "未登录" }
+        ]
+      },
+      "business_codes": {}
+    }
+  ]
+}
