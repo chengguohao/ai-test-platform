@@ -81,6 +81,13 @@ copy .env.example .env        # 填写 LLM_API_KEY（OpenAI 兼容任意模型�
 
 在项目 `engine_config` 填：`base_url`、`login_name`、`password`、`pytest_project_dir`、`python`、`allure_bin`、`gen_dir`。新系统按 `docs/被测系统接入与平台操作手册.md` 适配（登记业务 marker、生成业务码模块、确认 fixtures 继承链），平台提示词会按画像自动适配。
 
+
+## 数据库与初始化
+
+- 默认 SQLite：数据库文件在本地 `data/app.db`，**首次启动后端自动建表**并补齐迁移列；运行期数据（项目/流程/用例/执行记录）**不入 Git 仓库**（`.gitignore` 的 `data/`），clone 后无需任何数据库准备；
+- 新建项目时自动生成「默认流程」模板（需求上传 → 接口文档 → 生成用例 → 自动化生成 → 执行报告，5 阶段，可在流程设计页修改）；
+- 生产可切 MySQL：`.env` 设置 `DATABASE_URL=mysql+pymysql://user:pass@host:3306/ai_test_platform`；
+- 仓库内置示例需求与接口文档（`docs/templates/examples`：员工请假、通知公告），新建项目后可直接上传体验「生成用例 → 评审 → 自动化生成」全流程。
 ## 测试执行
 
 环境自检 → `pytest tests/api/{module} -m smartadmin --alluredir …` → `allure generate` → 页面 iframe 打开 `/reports/{project}/{run_id}/allure-report/index.html`。
