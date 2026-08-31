@@ -34,3 +34,8 @@ data/
 # OS
 .DS_Store
 Thumbs.db
+# Word lock files
+~$*
+
+# ad-hoc probe scripts
+pytest-bdd/tools/sql/_*.py
