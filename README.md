@@ -28,9 +28,25 @@ flowchart LR
 | 接入源自由 | 每阶段可选：上传 / 粘贴 / URL 抓取 / MCP 连接器 / 通用 HTTP / SMTP，可插拔实现 `connectors/base.py` |
 | Skill 契约化 | 需求摘要 / 用例生成 / 自动化生成三个 Skill：固定执行流程 + JSON Schema 输出校验，校验不过自动重试 |
 | 用例评审闭环 | 导出 XMind / Excel → 打回（必填原因重生成）或人工改后回读 → 通过，不通过不进下一步 |
-| 自动化生成 | 按 pytest-bdd 规范生成 ApiCase（parametrize / 信封守卫 / save-串联 / 清理注册 / TC 映射），不覆盖手写维护文件 |
+| 声明式自动化生成 | AI 只输出受 JSON Schema 约束的**用例声明**（不写 Python），平台用确定性模板渲染成 pytest 脚本：断言操作符白名单 / 反例业务码解析 / 资源清理注册 / TC 映射全部由模板保证，杜绝 AI 幻觉发明不支持的语法与断言；落盘前再做语法编译 + op 白名单 + 业务码 key 对齐校验，语法错误拒绝落盘并提示重新生成 |
+| 业务码探测对齐 | 会话启动自动探测被测系统真实业务失败码（重名 / 删除不存在 / 越权 / 未登录 / 参数错误），回填 `SA_CODES` 语义组，反例用例按真实 code 断言，探测不到的 key 显式降级提示（不再静默白测） |
+| 一键执行 | 上传需求后一键跑完剩余全流程：仅有需求文档 → 执行到生成用例；有接口文档 → 跑通自动化生成与执行测试，失败自动 AI 修复重跑；失败阶段可重置后续跑 |
+| 执行总结 | 全流程完成后 AI 生成中文汇报：区分「用例集设计的用例数」与「实际执行的用例数」，附评审 / 打回 / AI 修复 / 多轮执行汇总 |
 | 多被测系统适配 | `system_profile` 扫描被测工程画像（marker / 业务码 / 角色体系 / fixture 继承链），动态渲染提示词，换系统只改 gen_dir |
 | 执行报告 | 环境自检（区分环境问题）→ pytest 子进程 → Allure 报告 → 失败分级（人工介入 / 打回重生成） |
+
+## 平台界面预览
+
+> 截图保存在 `docs/image/`（仓库内路径）。GitHub 上点击图片文件名即可查看原图。
+
+| 页面 | 截图 |
+|---|---|
+| 项目列表 | ![项目列表](docs/image/项目列表.png) |
+| 需求上传（含 AI 需求摘要） | ![需求上传](docs/image/需求上传.png) |
+| 生成用例（业务 / 接口用例树） | ![用例生成](docs/image/用例生成.png) |
+| 自动化生成（声明式 → pytest 脚本 + 策略说明） | ![自动化生成](docs/image/自动化生成.png) |
+| 执行报告（环境自检 + Allure + AI 总结） | ![执行报告](docs/image/执行报告.png) |
+| 知识库（用例沉淀复用） | ![知识库](docs/image/知识库.png) |
 
 ## 仓库结构
 
@@ -87,7 +103,7 @@ copy .env.example .env        # 填写 LLM_API_KEY（OpenAI 兼容任意模型�
 - 默认 SQLite：数据库文件在本地 `data/app.db`，**首次启动后端自动建表**并补齐迁移列；运行期数据（项目/流程/用例/执行记录）**不入 Git 仓库**（`.gitignore` 的 `data/`），clone 后无需任何数据库准备；
 - 新建项目时自动生成「默认流程」模板（需求上传 → 接口文档 → 生成用例 → 自动化生成 → 执行报告，5 阶段，可在流程设计页修改）；
 - 生产可切 MySQL：`.env` 设置 `DATABASE_URL=mysql+pymysql://user:pass@host:3306/ai_test_platform`；
-- 仓库内置示例需求与接口文档（`docs/templates/examples`：员工请假、通知公告），新建项目后可直接上传体验「生成用例 → 评审 → 自动化生成」全流程。
+- 仓库内置示例需求与接口文档（`docs/templates/examples`：员工请假、通知公告、企业管理），新建项目后可直接上传体验「生成用例 → 评审 → 自动化生成」全流程。
 ## 测试执行
 
 环境自检 → `pytest tests/api/{module} -m smartadmin --alluredir …` → `allure generate` → 页面 iframe 打开 `/reports/{project}/{run_id}/allure-report/index.html`。
