@@ -185,6 +185,12 @@ def run_summary(body: RunSummaryIn, db: Session = Depends(get_db)):
             fix_rounds = (st.meta or {}).get("fix_rounds", 0)
     exec_lines = [{"id": e.id, "status": e.status, "summary": {k: v for k, v in (e.summary or {}).items()
                     if k != "cases"}} for e in executions]
+    # 双口径：
+    #   design = 用例集设计覆盖数（生成/评审过的用例树）；
+    #   run    = 最近一次执行的 pytest 实际节点数（执行报告口径，可能因多角色展开/skip 与 design 不同）。
+    last_exec_summary = executions[-1].summary or {} if executions else {}
+    exec_total = last_exec_summary.get("total", 0)
+    exec_passed = last_exec_summary.get("passed", 0)
 
     payload = {
         "实例": {"id": run.id, "名称": run.name, "状态": run.status,
@@ -199,6 +205,7 @@ def run_summary(body: RunSummaryIn, db: Session = Depends(get_db)):
         "评审": {"评审记录数": len(reviews),
                  "打回次数": sum(1 for r in reviews if r.result == "returned")},
         "执行": {"总轮次": len(executions), "各轮结果": exec_lines,
+                 "最近一次执行": {"实际执行用例数": exec_total, "通过数": exec_passed},
                  "AI自动修复轮数": fix_rounds},
         "工件": {"总数": len(n_artifacts)},
     }
@@ -208,7 +215,9 @@ def run_summary(body: RunSummaryIn, db: Session = Depends(get_db)):
         {"role": "system", "content":
             "你是测试项目负责人。基于提供的全流程数据，用中文写一段 150~300 字的执行总结，"
             "面向测试经理汇报本次测试流程。要求：①先说整体结论（通过/经历几轮）；"
-            "②点出用例覆盖情况（模块/分组/用例数）；③执行情况（几轮、失败原因、是否经 AI 自动修复）；"
+            "②点出用例覆盖情况（模块/分组/用例数——注意区分「用例集设计的用例数」与「实际执行的用例数」："
+            "如设计了 N 条、实际执行 M 条、通过 K 条，两者可能不同，须如实分别表述，不要混为一谈）；"
+            "③执行情况（几轮、失败原因、是否经 AI 自动修复）；"
             "④如有打回/修复过程，说明闭环效果；⑤最后一句风险或建议。只输出总结正文，不要标题和格式化符号。"},
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False, indent=2)},
     ]

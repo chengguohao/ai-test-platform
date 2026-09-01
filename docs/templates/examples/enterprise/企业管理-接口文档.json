@@ -1,0 +1,464 @@
+{
+  "api_doc_version": "1.0.0",
+  "module": "enterprise",
+  "title": "企业管理接口文档",
+  "base_url": "/",
+  "_填写说明": "本文件为 SmartAdmin OA「企业管理」模块接口文档，接口路径/字段/权限点全部取自本地源码 EnterpriseController.java 与其 Form/VO 定义，禁止改动或自造。统一响应信封 { ok, code, msg, data }，成功 code=0；通用错误码在 common_error_codes，模块专属错误码在接口 business_codes。登录 POST /login，凭证放请求头 Authorization。",
+
+  "envelope": {
+    "_说明": "统一响应信封：{ ok, code, msg, data }，业务成功 code=0、ok=true、msg=操作成功",
+    "ok": "ok",
+    "code": "code",
+    "msg": "msg",
+    "data": "data",
+    "success_code": 0
+  },
+
+  "auth": {
+    "_说明": "除 role=anonymous 的接口外均需登录；登录凭证放在请求头 Authorization（Sa-Token）",
+    "header": "Authorization",
+    "login_api": "POST /login",
+    "role_identifiers": {
+      "admin": "管理员",
+      "employee": "普通员工"
+    }
+  },
+
+  "enums": [
+    {
+      "name": "enterprise_type",
+      "description": "企业类型（EnterpriseTypeEnum）",
+      "values": [
+        { "value": 1, "label": "有限企业" },
+        { "value": 2, "label": "外资企业" }
+      ]
+    }
+  ],
+
+  "common_error_codes": [
+    { "key": "param_error", "code": 40000, "message": "参数校验失败（必填缺失/格式错误/长度超限/分页参数非法）" },
+    { "key": "not_login", "code": 40100, "message": "未登录或登录已过期（真实系统返回 LOGIN_STATE_INVALID）" },
+    { "key": "no_permission", "code": 40300, "message": "无权限访问（真实系统返回 NO_PERMISSION）" }
+  ],
+
+  "interfaces": [
+    {
+      "id": "IF-01",
+      "name": "分页查询企业",
+      "role": "admin",
+      "method": "POST",
+      "path": "/oa/enterprise/page/query",
+      "summary": "分页查询企业列表（已删除的自动过滤），支持关键字/创建时间范围/禁用状态筛选，返回 PageResult{ pageNum, pageSize, total, pages, list, emptyFlag }，list 元素为 EnterpriseVO",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": [
+          { "name": "pageNum", "type": "long", "required": true, "length": "≥1", "enum": null, "description": "页码" },
+          { "name": "pageSize", "type": "long", "required": true, "length": "1~500", "enum": null, "description": "每页数量，最大 500" },
+          { "name": "keywords", "type": "string", "required": false, "length": "≤200", "enum": null, "description": "关键字（企业名称等模糊匹配）" },
+          { "name": "startTime", "type": "string", "required": false, "length": "yyyy-MM-dd", "enum": null, "description": "创建时间范围起" },
+          { "name": "endTime", "type": "string", "required": false, "length": "yyyy-MM-dd", "enum": null, "description": "创建时间范围止" },
+          { "name": "disabledFlag", "type": "boolean", "required": false, "length": null, "enum": null, "description": "禁用状态过滤（true 已禁用 / false 启用）" }
+        ]
+      },
+      "response": {
+        "data_type": "object",
+        "description": "data = PageResult<EnterpriseVO>",
+        "success_fields": [
+          { "name": "pageNum", "type": "long", "description": "当前页" },
+          { "name": "pageSize", "type": "long", "description": "每页数量" },
+          { "name": "total", "type": "long", "description": "总记录数" },
+          { "name": "pages", "type": "long", "description": "总页数" },
+          { "name": "emptyFlag", "type": "boolean", "description": "是否为空" },
+          { "name": "list", "type": "array<EnterpriseVO>", "description": "企业列表，元素含 enterpriseId、enterpriseName、unifiedSocialCreditCode、type、contact、contactPhone、email、provinceName、cityName、districtName、address、disabledFlag、createUserName、createTime、updateTime" }
+        ],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "分页参数为空或 pageSize>500" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "无 oa:enterprise:query 权限" }
+        ]
+      },
+      "business_codes": {}
+    },
+
+    {
+      "id": "IF-02",
+      "name": "导出企业信息",
+      "role": "admin",
+      "method": "POST",
+      "path": "/oa/enterprise/exportExcel",
+      "summary": "按查询条件导出企业信息为 Excel 文件流（带水印，文件名「企业基本信息.xlsx」）；无数据时返回 ok=false、code=param_error、msg=暂无数据",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": [
+          { "name": "keywords", "type": "string", "required": false, "length": "≤200", "enum": null, "description": "关键字" },
+          { "name": "startTime", "type": "string", "required": false, "length": "yyyy-MM-dd", "enum": null, "description": "创建时间范围起" },
+          { "name": "endTime", "type": "string", "required": false, "length": "yyyy-MM-dd", "enum": null, "description": "创建时间范围止" },
+          { "name": "disabledFlag", "type": "boolean", "required": false, "length": null, "enum": null, "description": "禁用状态过滤" }
+        ]
+      },
+      "response": {
+        "data_type": "file",
+        "description": "成功返回 xlsx 文件流（Content-Type 为 Excel）；导出的列：企业名称/统一社会信用代码/企业类型/联系人/联系人电话/邮箱/省份名称/城市名称/区县名称/详细地址；无数据时响应信封 ok=false、code=40000、msg=暂无数据",
+        "success_fields": [],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "暂无数据" },
+          { "key": "not_login", "code": 40100, "message": "未登录" }
+        ]
+      },
+      "business_codes": {}
+    },
+
+    {
+      "id": "IF-03",
+      "name": "查询企业详情",
+      "role": "admin",
+      "method": "GET",
+      "path": "/oa/enterprise/get/{enterpriseId}",
+      "summary": "按企业ID查询详情（已删除的企业返回失败），data 为 EnterpriseVO 全字段",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [
+          { "name": "enterpriseId", "type": "long", "required": true, "description": "企业ID" }
+        ],
+        "query_params": [],
+        "headers": [],
+        "body": []
+      },
+      "response": {
+        "data_type": "object",
+        "description": "data = EnterpriseVO：enterpriseId、enterpriseName、enterpriseLogo、unifiedSocialCreditCode、type、contact、contactPhone、email、province、provinceName、city、cityName、district、districtName、address、businessLicense、disabledFlag、createUserId、createUserName、createTime、updateTime",
+        "success_fields": [
+          { "name": "enterpriseId", "type": "long", "description": "企业ID" },
+          { "name": "enterpriseName", "type": "string", "description": "企业名称" },
+          { "name": "enterpriseLogo", "type": "string", "description": "企业logo（文件key）" },
+          { "name": "unifiedSocialCreditCode", "type": "string", "description": "统一社会信用代码" },
+          { "name": "type", "type": "int", "enum": "enterprise_type", "description": "企业类型" },
+          { "name": "contact", "type": "string", "description": "联系人" },
+          { "name": "contactPhone", "type": "string", "description": "联系人电话" },
+          { "name": "email", "type": "string", "description": "邮箱" },
+          { "name": "provinceName", "type": "string", "description": "省份名称" },
+          { "name": "cityName", "type": "string", "description": "城市名称" },
+          { "name": "districtName", "type": "string", "description": "区县名称" },
+          { "name": "address", "type": "string", "description": "详细地址" },
+          { "name": "businessLicense", "type": "string", "description": "营业执照（文件key）" },
+          { "name": "disabledFlag", "type": "boolean", "description": "禁用状态（true 禁用 / false 启用）" },
+          { "name": "createUserName", "type": "string", "description": "创建人名称" },
+          { "name": "createTime", "type": "string", "description": "创建时间" },
+          { "name": "updateTime", "type": "string", "description": "更新时间" }
+        ],
+        "error_codes": [
+          { "key": "enterprise_not_exist", "code": 20011, "message": "企业不存在或已删除" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "无 oa:enterprise:detail 权限" }
+        ]
+      },
+      "business_codes": {
+        "enterprise_not_exist": { "code": 20011, "message": "企业不存在或已删除" }
+      }
+    },
+
+    {
+      "id": "IF-04",
+      "name": "新建企业",
+      "role": "admin",
+      "method": "POST",
+      "path": "/oa/enterprise/create",
+      "summary": "新建企业，成功后 data=null；企业名称重复返回业务失败 enterprise_name_duplicate；创建人由服务端从登录态写入 createUserId/createUserName",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": [
+          { "name": "enterpriseName", "type": "string", "required": true, "length": "≤200", "enum": null, "description": "企业名称（全库唯一，去除已删除）" },
+          { "name": "enterpriseLogo", "type": "string", "required": false, "length": null, "enum": null, "description": "企业logo（文件key，前端上传后回填）" },
+          { "name": "unifiedSocialCreditCode", "type": "string", "required": true, "length": "≤200", "enum": null, "description": "统一社会信用代码" },
+          { "name": "type", "type": "int", "required": true, "length": null, "enum": "enterprise_type", "description": "企业类型（1有限企业/2外资企业）" },
+          { "name": "contact", "type": "string", "required": true, "length": "≤100", "enum": null, "description": "联系人" },
+          { "name": "contactPhone", "type": "string", "required": true, "length": "手机号格式", "enum": null, "description": "联系人电话" },
+          { "name": "email", "type": "string", "required": false, "length": "邮箱格式", "enum": null, "description": "邮箱" },
+          { "name": "province", "type": "int", "required": false, "length": null, "enum": null, "description": "省份ID" },
+          { "name": "provinceName", "type": "string", "required": false, "length": null, "enum": null, "description": "省份名称" },
+          { "name": "city", "type": "int", "required": false, "length": null, "enum": null, "description": "城市ID" },
+          { "name": "cityName", "type": "string", "required": false, "length": null, "enum": null, "description": "城市名称" },
+          { "name": "district", "type": "int", "required": false, "length": null, "enum": null, "description": "区县ID" },
+          { "name": "districtName", "type": "string", "required": false, "length": null, "enum": null, "description": "区县名称" },
+          { "name": "address", "type": "string", "required": false, "length": "≤500", "enum": null, "description": "详细地址" },
+          { "name": "businessLicense", "type": "string", "required": false, "length": null, "enum": null, "description": "营业执照（文件key）" },
+          { "name": "disabledFlag", "type": "boolean", "required": true, "length": null, "enum": null, "description": "禁用状态（false 启用 / true 禁用）" }
+        ]
+      },
+      "response": {
+        "data_type": "null",
+        "description": "创建成功 data=null，需用分页查询反查 enterpriseId",
+        "success_fields": [],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "必填缺失/手机号或邮箱格式错误" },
+          { "key": "enterprise_name_duplicate", "code": 20010, "message": "企业名称重复" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "无 oa:enterprise:add 权限" }
+        ]
+      },
+      "business_codes": {
+        "enterprise_name_duplicate": { "code": 20010, "message": "企业名称重复" }
+      }
+    },
+
+    {
+      "id": "IF-05",
+      "name": "编辑企业",
+      "role": "admin",
+      "method": "POST",
+      "path": "/oa/enterprise/update",
+      "summary": "按 enterpriseId 编辑企业（请求体 = 创建字段 + enterpriseId），成功后 data=null；企业不存在返回 enterprise_not_exist，名称重复返回 enterprise_name_duplicate",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": [
+          { "name": "enterpriseId", "type": "long", "required": true, "length": null, "enum": null, "description": "企业ID（必填）" },
+          { "name": "enterpriseName", "type": "string", "required": true, "length": "≤200", "enum": null, "description": "企业名称（排除自身后唯一）" },
+          { "name": "enterpriseLogo", "type": "string", "required": false, "length": null, "enum": null, "description": "企业logo" },
+          { "name": "unifiedSocialCreditCode", "type": "string", "required": true, "length": "≤200", "enum": null, "description": "统一社会信用代码" },
+          { "name": "type", "type": "int", "required": true, "length": null, "enum": "enterprise_type", "description": "企业类型" },
+          { "name": "contact", "type": "string", "required": true, "length": "≤100", "enum": null, "description": "联系人" },
+          { "name": "contactPhone", "type": "string", "required": true, "length": "手机号格式", "enum": null, "description": "联系人电话" },
+          { "name": "email", "type": "string", "required": false, "length": "邮箱格式", "enum": null, "description": "邮箱" },
+          { "name": "province", "type": "int", "required": false, "length": null, "enum": null, "description": "省份ID" },
+          { "name": "provinceName", "type": "string", "required": false, "length": null, "enum": null, "description": "省份名称" },
+          { "name": "city", "type": "int", "required": false, "length": null, "enum": null, "description": "城市ID" },
+          { "name": "cityName", "type": "string", "required": false, "length": null, "enum": null, "description": "城市名称" },
+          { "name": "district", "type": "int", "required": false, "length": null, "enum": null, "description": "区县ID" },
+          { "name": "districtName", "type": "string", "required": false, "length": null, "enum": null, "description": "区县名称" },
+          { "name": "address", "type": "string", "required": false, "length": "≤500", "enum": null, "description": "详细地址" },
+          { "name": "businessLicense", "type": "string", "required": false, "length": null, "enum": null, "description": "营业执照" },
+          { "name": "disabledFlag", "type": "boolean", "required": true, "length": null, "enum": null, "description": "禁用状态" }
+        ]
+      },
+      "response": {
+        "data_type": "null",
+        "description": "编辑成功 data=null",
+        "success_fields": [],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "参数校验失败" },
+          { "key": "enterprise_not_exist", "code": 20011, "message": "企业不存在或已删除" },
+          { "key": "enterprise_name_duplicate", "code": 20010, "message": "企业名称重复" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "无 oa:enterprise:update 权限" }
+        ]
+      },
+      "business_codes": {
+        "enterprise_name_duplicate": { "code": 20010, "message": "企业名称重复" },
+        "enterprise_not_exist": { "code": 20011, "message": "企业不存在或已删除" }
+      }
+    },
+
+    {
+      "id": "IF-06",
+      "name": "删除企业",
+      "role": "admin",
+      "method": "GET",
+      "path": "/oa/enterprise/delete/{enterpriseId}",
+      "summary": "按企业ID逻辑删除（deletedFlag=true），成功后 data=null，分页查询不再出现；企业不存在或已删除返回 enterprise_not_exist",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [
+          { "name": "enterpriseId", "type": "long", "required": true, "description": "企业ID" }
+        ],
+        "query_params": [],
+        "headers": [],
+        "body": []
+      },
+      "response": {
+        "data_type": "null",
+        "description": "删除成功 data=null",
+        "success_fields": [],
+        "error_codes": [
+          { "key": "enterprise_not_exist", "code": 20011, "message": "企业不存在或已删除" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "无 oa:enterprise:delete 权限" }
+        ]
+      },
+      "business_codes": {
+        "enterprise_not_exist": { "code": 20011, "message": "企业不存在或已删除" }
+      }
+    },
+
+    {
+      "id": "IF-07",
+      "name": "按类型查询企业列表",
+      "role": "admin",
+      "method": "GET",
+      "path": "/oa/enterprise/query/list",
+      "summary": "按企业类型查询未删除的企业列表（含数据范围过滤），供下拉选择用，data 为 List<EnterpriseListVO{ enterpriseId, enterpriseName }>；type 为空时返回全部",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [
+          { "name": "type", "type": "int", "required": false, "enum": "enterprise_type", "description": "企业类型（1有限/2外资），不传查全部" }
+        ],
+        "headers": [],
+        "body": []
+      },
+      "response": {
+        "data_type": "array",
+        "description": "data = List<EnterpriseListVO>",
+        "success_fields": [
+          { "name": "enterpriseId", "type": "long", "description": "企业ID" },
+          { "name": "enterpriseName", "type": "string", "description": "企业名称" }
+        ],
+        "error_codes": [
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "无 oa:enterprise:query 权限" }
+        ]
+      },
+      "business_codes": {}
+    },
+
+    {
+      "id": "IF-08",
+      "name": "企业添加员工",
+      "role": "admin",
+      "method": "POST",
+      "path": "/oa/enterprise/employee/add",
+      "summary": "给指定企业批量添加员工（employeeIdList），已在该企业下的员工自动过滤（幂等），全部已存在时直接成功；企业不存在返回 enterprise_not_exist；成功后 data=null",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": [
+          { "name": "enterpriseId", "type": "long", "required": true, "length": null, "enum": null, "description": "企业ID" },
+          { "name": "employeeIdList", "type": "array<long>", "required": true, "length": "非空", "enum": null, "description": "员工ID列表（已存在的会被过滤）" }
+        ]
+      },
+      "response": {
+        "data_type": "null",
+        "description": "添加成功 data=null",
+        "success_fields": [],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "企业ID为空或员工列表为空" },
+          { "key": "enterprise_not_exist", "code": 20011, "message": "企业不存在或已删除" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "无 oa:enterprise:addEmployee 权限" }
+        ]
+      },
+      "business_codes": {
+        "enterprise_not_exist": { "code": 20011, "message": "企业不存在或已删除" }
+      }
+    },
+
+    {
+      "id": "IF-09",
+      "name": "查询企业全部员工",
+      "role": "admin",
+      "method": "POST",
+      "path": "/oa/enterprise/employee/list",
+      "summary": "按企业ID列表查询这些企业的全部员工（无分页）；enterpriseIdList 为空时返回空数组",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": [
+          { "name": "enterpriseIdList", "type": "array<long>", "required": false, "length": null, "enum": null, "description": "企业ID列表，可为空" }
+        ]
+      },
+      "response": {
+        "data_type": "array",
+        "description": "data = List<EnterpriseEmployeeVO>",
+        "success_fields": [
+          { "name": "enterpriseEmployeeId", "type": "long", "description": "企业员工关联ID" },
+          { "name": "enterpriseId", "type": "long", "description": "企业ID" },
+          { "name": "enterpriseName", "type": "string", "description": "企业名称" },
+          { "name": "employeeId", "type": "long", "description": "员工ID" },
+          { "name": "loginName", "type": "string", "description": "登录账号" },
+          { "name": "actualName", "type": "string", "description": "员工名称" },
+          { "name": "phone", "type": "string", "description": "手机号码" },
+          { "name": "departmentId", "type": "long", "description": "部门ID" },
+          { "name": "disabledFlag", "type": "boolean", "description": "是否被禁用" }
+        ],
+        "error_codes": [
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "无 oa:enterprise:queryEmployee 权限" }
+        ]
+      },
+      "business_codes": {}
+    },
+
+    {
+      "id": "IF-10",
+      "name": "分页查询企业员工",
+      "role": "admin",
+      "method": "POST",
+      "path": "/oa/enterprise/employee/queryPage",
+      "summary": "按企业ID分页查询该企业的员工，支持关键字（姓名/手机号/登录账号）搜索，返回 PageResult<EnterpriseEmployeeVO>，元素含 departmentName（部门完整路径）",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": [
+          { "name": "pageNum", "type": "long", "required": true, "length": "≥1", "enum": null, "description": "页码" },
+          { "name": "pageSize", "type": "long", "required": true, "length": "1~500", "enum": null, "description": "每页数量" },
+          { "name": "enterpriseId", "type": "long", "required": true, "length": null, "enum": null, "description": "企业ID（必填）" },
+          { "name": "keyword", "type": "string", "required": false, "length": "≤20", "enum": null, "description": "搜索词（姓名/手机号/登录账号）" }
+        ]
+      },
+      "response": {
+        "data_type": "object",
+        "description": "data = PageResult<EnterpriseEmployeeVO>",
+        "success_fields": [
+          { "name": "total", "type": "long", "description": "总记录数" },
+          { "name": "list", "type": "array<EnterpriseEmployeeVO>", "description": "员工列表，元素含 actualName、phone、loginName、enterpriseName、departmentName、disabledFlag" }
+        ],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "分页参数为空或 enterpriseId 为空" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "无 oa:enterprise:queryEmployee 权限" }
+        ]
+      },
+      "business_codes": {}
+    },
+
+    {
+      "id": "IF-11",
+      "name": "企业删除员工",
+      "role": "admin",
+      "method": "POST",
+      "path": "/oa/enterprise/employee/delete",
+      "summary": "从指定企业移除员工（employeeIdList 批量），成功后 data=null；企业不存在返回 enterprise_not_exist",
+      "request": {
+        "content_type": "application/json",
+        "path_params": [],
+        "query_params": [],
+        "headers": [],
+        "body": [
+          { "name": "enterpriseId", "type": "long", "required": true, "length": null, "enum": null, "description": "企业ID" },
+          { "name": "employeeIdList", "type": "array<long>", "required": true, "length": "非空", "enum": null, "description": "员工ID列表" }
+        ]
+      },
+      "response": {
+        "data_type": "null",
+        "description": "移除成功 data=null",
+        "success_fields": [],
+        "error_codes": [
+          { "key": "param_error", "code": 40000, "message": "企业ID为空或员工列表为空" },
+          { "key": "enterprise_not_exist", "code": 20011, "message": "企业不存在或已删除" },
+          { "key": "not_login", "code": 40100, "message": "未登录" },
+          { "key": "no_permission", "code": 40300, "message": "无 oa:enterprise:deleteEmployee 权限" }
+        ]
+      },
+      "business_codes": {
+        "enterprise_not_exist": { "code": 20011, "message": "企业不存在或已删除" }
+      }
+    }
+  ]
+}

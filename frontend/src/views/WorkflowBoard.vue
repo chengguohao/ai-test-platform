@@ -4,7 +4,6 @@
     <div class="page-header">
       <div class="board-head-left">
         <h3 class="page-title">{{ project?.name || '项目工作台' }}</h3>
-        <span v-if="project" class="muted board-desc">{{ project.desc || '' }}</span>
         <el-select
           v-model="selectedRunId"
           placeholder="选择流程实例"
@@ -49,7 +48,7 @@
           <el-icon class="kb-info-icon"><InfoFilled /></el-icon>
         </el-tooltip>
         <el-button
-          v-if="run && (run.status !== 'success' || canContinueRun)"
+          v-if="showOneClickRun"
           type="primary"
           :loading="autoRunning"
           @click="oneClickRun"
@@ -187,6 +186,15 @@ const run = computed(() => runs.value.find((r) => r.id === selectedRunId.value))
 /* 仅需求模式完成的实例（自动化生成/执行阶段为 skipped）：上传接口文档后可续跑全流程 */
 const canContinueRun = computed(() =>
   stages.value.some((s) => ['auto_gen', 'execute'].includes(s.stage_type) && s.status === 'skipped')
+)
+
+/* 一键执行/续跑 按钮：实例未完成，或存在失败阶段（可重跑），或有可续跑阶段时显示 */
+const showOneClickRun = computed(() =>
+  run.value && (
+    run.value.status !== 'success' ||
+    canContinueRun.value ||
+    stages.value.some((s) => s.status === 'failed')
+  )
 )
 
 /* ---------- 一键执行（自动跑完剩余全流程） ---------- */
@@ -511,10 +519,6 @@ onUnmounted(stopAutoRunPolling)
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-}
-
-.board-desc {
-  font-size: 13px;
 }
 
 .run-select {

@@ -12,125 +12,13 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app import models
+from app.config import settings
 from app.services import task_progress
 from app.services.ai_llm import model_label
+from app.services.auto_gen_render import render_code
 from app.services.skills import auto_gen as skill_auto
-from app.services.skill_engine import run_code_skill
-from app.services.system_profile import collect_system_profile
-
-def _extract_code(text: str) -> str:
-    m = re.search(r"```(?:python)?\s*(.*?)```", text, re.S)
-    return m.group(1).strip() if m else text.strip()
-
-
-def _extract_strategy(text: str) -> str:
-    """提取 LLM 在代码块前输出的『生成策略说明』。
-
-    skill 提示词要求 LLM 先写一段 markdown 说明（设计思路），再写代码块。
-    取代码块之前的全部文本作为策略说明，去掉开头的 ## 生成策略说明 标题前缀。
-    """
-    m = re.search(r"```(?:python)?\s*", text)
-    if not m:
-        return ""
-    head = text[:m.start()].strip()
-    head = re.sub(r"\A#+\s*生成策略说明\s*\n?", "", head, flags=re.M)
-    return head.strip()
-
-
-_BF_HELPER = '''
-def _bf(key):
-    """动态业务失败断言：探测不到业务码时退化为「msg 存在」断言，避免导入期 None 崩溃。"""
-    code = SA_CODES.get(key)
-    if code is None:
-        return [Assertion(expected=True, op="exists", field="/msg",
-                          reason=f"业务码 {key} 未探测到，退化为仅校验失败信封")]
-    return Assertion.biz_fail(code=code) + [Assertion(expected=True, op="exists", field="/msg")]
-
-'''
-
-
-def _patch_anonymous_client(code: str) -> str:
-    """兜底 2：LLM 自创匿名 client 类 → 统一为 ApiClient(base_url)。
-
-    触发条件：代码里出现「非 ApiClient 的 XxxClient(base_url)」引用（如 _AnonymousClient(base_url)），
-    说明 LLM 自创了 client 类。run_case 依赖 client.record_assertions/mark_expect，
-    自创类（如基于 requests.Session）缺这些方法会在运行时 AttributeError 崩溃。
-    处理：
-      1) 替换该引用为 ApiClient(base_url)；
-      2) 删除被引用的自定义 client 类定义块（类体基于 requests 或类名以下划线开头才删，保守）；
-      3) 补 from support.clients.api_client import ApiClient（若未导入）；
-      4) 删类后 import requests 已无引用时一并删除。
-    """
-    m_ref = re.search(r'\b(?!ApiClient\b)(\w+Client)\(base_url\)', code)
-    if not m_ref:
-        return code
-    cls_name = m_ref.group(1)
-    # 1) 替换引用
-    code = re.sub(r'\b(?!ApiClient\b)\w+Client\(base_url\)', 'ApiClient(base_url)', code)
-    # 2) 删除被引用的自定义 client 类定义块（到下一个顶层代码为止）
-    lines = code.splitlines(keepends=True)
-    out, i, n = [], 0, len(lines)
-    while i < n:
-        ln = lines[i]
-        head = ln.lstrip()
-        if head.startswith(f"class {cls_name}:"):
-            block, j = [ln], i + 1
-            while j < n:
-                l2 = lines[j]
-                if l2.strip() and not l2.startswith((" ", "\t")):
-                    break
-                block.append(l2)
-                j += 1
-            block_text = "".join(block)
-            # 保守：仅当类体基于 requests 或类名以下划线开头（自创特征）才删除
-            if "requests" in block_text or cls_name.startswith("_"):
-                i = j
-                continue
-            out.extend(block)
-            i = j
-            continue
-        out.append(ln)
-        i += 1
-    code = "".join(out)
-    # 3) 补 import ApiClient（插在最后一个 import 行之后）
-    if "ApiClient(base_url)" in code and "from support.clients.api_client import ApiClient" not in code:
-        m = list(re.finditer(r'^import |^from .+ import .+$', code, re.M))
-        if m:
-            pos = m[-1].end()
-            code = code[:pos] + "\nfrom support.clients.api_client import ApiClient" + code[pos:]
-        else:
-            code = "from support.clients.api_client import ApiClient\n" + code
-    # 4) 清理已无引用的孤立 import requests
-    if "import requests" in code and "requests." not in code:
-        code = re.sub(r'^import requests\s*\n', '', code, flags=re.M)
-    return code
-
-
-def _auto_patch(code: str) -> str:
-    """确定性兜底（纯文本、不重试）：无论 LLM 怎么写，都不会再产出崩溃代码。
-    1) 自创匿名 client 类 → ApiClient(base_url)（run_case 依赖 record_assertions/mark_expect）；
-    2) 导入期会崩的 Assertion.biz_fail(code=SA_CODES.get("X")) → *_bf("X") + 注入 _bf 辅助函数。"""
-    code = _patch_anonymous_client(code)
-    if 'Assertion.biz_fail(code=SA_CODES.get(' not in code:
-        return code
-    # 注入 _bf helper（若未定义）
-    if "def _bf(" not in code:
-        # 插在最后一个 import 行之后
-        m = list(re.finditer(r'^import |^from .+ import .+$', code, re.M))
-        if m:
-            pos = m[-1].end()
-            code = code[:pos] + "\n" + _BF_HELPER + code[pos:]
-        else:
-            code = _BF_HELPER + code
-    # 替换：列表上下文里的 biz_fail(code=SA_CODES.get("X"))  → *_bf("X")
-    code = re.sub(
-        r'Assertion\.biz_fail\(code=SA_CODES\.get\("([a-z_]+)"\)\),',
-        r'*_bf("\1"),', code)
-    # 兜底：末尾无逗号的情况（如断言列表末元素）
-    code = re.sub(
-        r'Assertion\.biz_fail\(code=SA_CODES\.get\("([a-z_]+)"\)\)',
-        r'*_bf("\1")', code)
-    return code
+from app.services.skill_engine import run_json_skill
+from app.services.system_profile import SystemProfile, collect_system_profile
 
 
 def _patch_roles(code: str, available: list[str]) -> str:
@@ -151,35 +39,129 @@ def _patch_roles(code: str, available: list[str]) -> str:
     return code
 
 
+# 断言引擎 support/api_case.py 支持的 op 白名单（白名单外一律非法，运行时会 raise ValueError）
+_VALID_OPS = {"eq", "ne", "exists", "contains", "in", "gt", "gte", "lt", "lte", "regex"}
+
+
+def _read_codes_keys(project_dir: Path, codes_mod: str, codes_var: str) -> set[str]:
+    """从被测工程 support/fixtures/{codes_mod}.py 读取业务码常量字典的键集合。
+
+    用 AST 解析（不 import 该模块，避免执行模块顶层代码的副作用，如依赖 pytest/.env）。
+    支持两种定义形态：
+      - 字面量字典：`SA_CODES: dict = {"key": None, ...}`
+      - 基于其它 dict 的推导式：`SA_CODES = {k: None for keys in _PROBE_GROUPS.values() for k in keys}`
+        （此时从被引用的 dict 字面量里收集键）
+    """
+    import ast
+
+    mod = project_dir / "support" / "fixtures" / f"{codes_mod}.py"
+    if not mod.is_file():
+        return set()
+    try:
+        tree = ast.parse(mod.read_text(encoding="utf-8", errors="ignore"))
+    except SyntaxError:
+        return set()
+
+    # 第一步：收集全部「顶层 dict 字面量」赋值（变量名 -> 键集合），兼容 Assign 与 AnnAssign
+    dict_literals: dict[str, set[str]] = {}
+    for n in tree.body:
+        target = None
+        if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
+            target = n.targets[0].id
+        elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
+            target = n.target.id
+        if target and isinstance(n.value, ast.Dict):
+            dict_literals[target] = {
+                k.value for k in n.value.keys
+                if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+
+    keys: set[str] = set()
+    for n in tree.body:
+        target = None
+        if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
+            target = n.targets[0].id
+        elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
+            target = n.target.id
+        if target != codes_var:
+            continue
+        # 字面量字典
+        if isinstance(n.value, ast.Dict):
+            for k in n.value.keys:
+                if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                    keys.add(k.value)
+            return keys
+        # 推导式：从被引用的 dict 变量收集键（如 `for keys in _PROBE_GROUPS.values()`）
+        if isinstance(n.value, ast.DictComp):
+            for gen in n.value.generators:
+                it = gen.iter
+                if isinstance(it, ast.Attribute) and isinstance(it.value, ast.Name) \
+                        and it.value.id in dict_literals:
+                    keys.update(dict_literals[it.value.id])
+            return keys
+    return keys
+
+
+def _lint_code(code: str, codes_label: str, codes_keys: set[str]) -> tuple[list[str], list[str]]:
+    """落盘前轻量校验（不重试、不自动修复）：语法编译 + 断言 op 白名单 + 反例业务码 key 对齐。
+
+    返回 (errors, warnings)：
+      - errors（语法错误）：文件完全不可运行，调用方应**拒绝落盘**并报错让用户重新生成；
+      - warnings（op 非法 / 业务码 key 对不上）：文件能跑但存在必挂/白测风险，落盘但
+        写日志 + 追加到「生成策略说明」核对清单，让测试人员看得见、优先处理。
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+    # 1) 语法编译：内置 compile 毫秒级，专门拦 keyword 重复 / 括号不匹配这类必炸错误
+    try:
+        compile(code, "<auto-gen>", "exec")
+    except SyntaxError as e:  # noqa: BLE001
+        errors.append(f"语法错误：{e.msg}（第 {e.lineno} 行）{e.text or ''}".strip())
+    # 2) 断言操作符白名单：白名单外的 op（is_array/type/len 等）运行时会 raise ValueError
+    for m in re.finditer(r"Assertion\s*\(([^)]*)\)", code):
+        inner = m.group(1)
+        om = re.search(r'\bop\s*=\s*"([a-z_]+)"', inner)
+        if om and om.group(1) not in _VALID_OPS:
+            line = code[:m.start()].count("\n") + 1
+            warnings.append(
+                f"不支持的断言操作符 op={om.group(1)!r}（第 {line} 行附近），运行时会 raise ValueError，"
+                f"请改用白名单之一：{', '.join(sorted(_VALID_OPS))}")
+    # 3) 反例业务码 key 对齐：_bf('key') 的 key 必须在业务码表字典键内，否则退化空壳反例=白测
+    if codes_keys:
+        for m in re.finditer(r'_bf\(["\']([a-z_]+)["\']\)', code):
+            key = m.group(1)
+            if key not in codes_keys:
+                line = code[:m.start()].count("\n") + 1
+                warnings.append(
+                    f"反例业务码 key={key!r}（第 {line} 行）不在 {codes_label} 已探测键 "
+                    f"{sorted(codes_keys)} 中，运行时 _bf 将降级为仅校验 /msg 存在（反例等于白测），"
+                    f"请改用已探测的键或补充探测")
+    return errors, warnings
+
+
 def _gen_code(inputs: dict, evidence: dict | None = None,
               log_hook=None, llm_config: dict | None = None,
               project_engine: dict | None = None, module: str = "") -> tuple[str, str]:
-    """一次性调用 LLM 生成代码 + 策略说明，不做 AST 校验/重试。
+    """调用 LLM 生成「用例声明 JSON」→ 确定性渲染成 pytest 源码（方向 A）。
 
-    设计取舍：测试人员是脚本最终负责人，AST 校验会拖慢首屏（每次失败重试 5+ 分钟），
-    且无法覆盖字段名/业务码语义错误。改为：LLM 一次输出 → _auto_patch 确定性兜底 biz_fail
-    写法 → 直接返回，让测试人员手工核对。
-    log_hook(1, []) 兼容旧接口，仅记生成完成。
-    返回 (code, strategy_desc)：strategy_desc 是 LLM 在代码块前写的『生成策略说明』。
-
-    被测系统解耦：system prompt 按项目画像渲染（marker/业务码/角色/marker 清单/fixtures），
-    换被测系统只改项目 gen_dir，不传染旧骨架。
+    LLM 只输出受 JSON Schema 约束的声明（run_json_skill 带 schema+业务规则校验与自动重试），
+    不再写任何 Python 代码 —— op 白名单 / _bf / pytestmark / save / cleanup 全部由
+    auto_gen_render 的固定模板生成，从架构上杜绝"AI 发明不支持的 op / 写错语法"。
+    返回 (code, strategy_desc)：strategy_desc 取自声明里的 strategy 字段。
     """
     spec = skill_auto.SKILL
+    profile = None
     if project_engine:
         from dataclasses import replace
         profile = collect_system_profile(project_engine, module)
         # 复制 spec（不 mutate 共享常量，避免并发交错污染 system_prompt）
         spec = replace(spec, system_prompt=skill_auto.build_system_prompt(profile))
-    raw = run_code_skill(spec, inputs, evidence=evidence, llm_config=llm_config)
-    code = _extract_code(raw)
-    code = _auto_patch(code)  # 确定性兜底：修掉导入期崩溃的 biz_fail 写法
-    strategy = _extract_strategy(raw)
-    if log_hook:
-        try:
-            log_hook(1, [])  # 一次性生成，errs 始终为空（兼容旧接口）
-        except Exception:  # noqa: BLE001 日志不能影响主流程
-            pass
+    res = run_json_skill(spec, inputs, evidence=evidence, log_hook=log_hook,
+                         llm_config=llm_config)
+    obj = res["result"]
+    strategy = obj.get("strategy", "")
+    if profile is None:
+        profile = SystemProfile()
+    code = render_code(obj, profile)
     return code, strategy
 
 
@@ -245,6 +227,11 @@ def generate(db: Session, run_id: int, project_engine: dict, project: str,
         existing_n = len(set(re.findall(r"^def test_", existing_code, re.M)))
 
     profile = collect_system_profile(project_engine, module)
+    # 业务码键清单：读被测工程业务码表字典的字面量键（供 LLM 的 biz_fail 对齐 + 落盘前校验）
+    codes_keys: set[str] = set()
+    if profile.codes_var and profile.codes_mod:
+        pj = Path(project_engine.get("pytest_project_dir") or settings().PYTEST_PROJECT_DIR)
+        codes_keys = _read_codes_keys(pj, profile.codes_mod, profile.codes_var)
     inputs = {
         "module": module,
         "case_tree": tree,
@@ -254,20 +241,25 @@ def generate(db: Session, run_id: int, project_engine: dict, project: str,
         "regenerate": True,
         # 实际可用 fixture 清单（被测系统子目录 conftest 继承链扫描，防 LLM 臆造）
         "available_fixtures": profile.fixtures,
-        # 已配置角色账号的角色键：约束 requires_role / FlowStep role 只允许用这些
+        # 已配置角色账号的角色键：约束 requires_role / step.role 只允许用这些
         "available_roles": profile.available_roles,
+        # 业务码键清单：声明里 biz_fail 只能取这些值
+        "codes_keys": sorted(codes_keys),
     }
     if fix_context:
         inputs["fix_context"] = fix_context   # 执行失败后的修复重生成：根因+pytest 日志
     _log(f"===== 自动化生成开始（module={module}, 全量覆盖={bool(existing_code)}, "
          f"接口文档 {len(api_text)} 字符, 旧 TC {existing_n} 个, "
          f"被测系统={profile.system_name}, 使用 AI 模型：{model_label(llm_config)}, "
-         f"可用 fixture {len(inputs['available_fixtures'])} 个"
+         f"可用 fixture {len(inputs['available_fixtures'])} 个, 业务码键 {len(codes_keys)} 个"
          + ("，携带执行失败修复上下文" if fix_context else "") + "）=====")
 
     def _hook(attempt: int, errs: list[str]) -> None:
-        # 兼容旧 _gen_code 接口：errs 始终为空（已去掉 AST 校验/重试）
-        _log("[生成] LLM 输出已收到（无 AST 校验/重试，请测试人员手工核对生成代码）")
+        # json 型 skill：每轮输出都过 JSON Schema + 业务规则校验
+        if errs:
+            _log(f"[生成] 第 {attempt} 次输出未通过契约校验（JSON Schema/业务规则）：{errs}")
+        else:
+            _log(f"[生成] 第 {attempt} 次输出通过契约校验，开始确定性渲染 pytest 脚本")
 
     # 增量保护：含「手写维护」标记的文件永不覆盖
     if existing_code and "手写维护" in existing_code:
@@ -293,6 +285,25 @@ def generate(db: Session, run_id: int, project_engine: dict, project: str,
             _log(f"[角色防护] 已移除 {removed} 个未配置角色的 requires_role 标记"
                  f"（当前可用角色：{', '.join(profile.available_roles)}）；"
                  f"对应角色用例运行时将单独跳过，不再整模块全 skip")
+
+    # 落盘前轻量校验（不重试、不自动修复）：
+    #   语法编译错误 → 拒绝落盘（文件完全不可运行），报错让用户重新生成；
+    #   op 非法 / 反例业务码 key 对不上 → 落盘但显式警告（日志 + 策略说明核对清单）。
+    lint_errors, lint_warnings = _lint_code(
+        code,
+        codes_label=(f"{profile.codes_var}（{profile.codes_mod}）" if profile.codes_var else ""),
+        codes_keys=codes_keys)
+    if lint_errors:
+        _log("[校验失败] 生成代码存在语法错误，已拒绝落盘（未写入目标文件），请重新生成：")
+        for e in lint_errors:
+            _log(f"  - {e}")
+        _register_log_artifact()
+        task_progress.finish(pkey, error="生成代码存在语法错误，已拒绝落盘，请重新生成")
+        raise ValueError("生成代码存在语法错误，已拒绝落盘，请重新生成：\n" + "\n".join(lint_errors))
+    if lint_warnings:
+        _log(f"[校验警告] 生成代码存在 {len(lint_warnings)} 处需人工核对的问题（已落盘）：")
+        for w in lint_warnings:
+            _log(f"  - {w}")
 
     diff = difflib.unified_diff(
         existing_code.splitlines(), code.splitlines(),
@@ -330,6 +341,10 @@ def generate(db: Session, run_id: int, project_engine: dict, project: str,
         desc_parts.append("（LLM 未输出策略说明，请直接看生成代码）")
     if existing_code:
         desc_parts.append("\n本次为全量覆盖生成：基于最新需求与接口文档重新生成全部用例，已覆盖旧脚本。")
+    if lint_warnings:
+        desc_parts.append(f"\n----\n**⚠ 自动校验警告（{len(lint_warnings)} 处，请优先处理）**：")
+        for w in lint_warnings:
+            desc_parts.append(f"- {w}")
     desc_parts.append("\n----\n**请测试人员手工核对**，重点检查：")
     desc_parts.append("- 字段名是否与接口文档实际返回一致（如 name vs noticeTypeName）；")
     desc_parts.append("- 字段断言 op 是否优先 eq/ne（仅接口返回值无法精确预知时才允许 exists/contains/gt 等特殊 op）；")

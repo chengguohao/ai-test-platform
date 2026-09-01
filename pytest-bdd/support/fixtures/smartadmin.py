@@ -57,17 +57,37 @@ SA_ROLE_CN: dict[str, str] = {"admin": "管理员", "reporter": "填报员", "au
 # 角色会话池：role_key -> ApiClient（懒登录缓存，每角色独立 token）
 SA_ROLE_CLIENTS: dict[str, ApiClient] = {}
 
-# 探测得到的 SmartAdmin 业务失败信封 code 常量：
-#   unauth             : 未登录 / token 失效 → 也是自动重登开关
-#   dup_enterprise     : 创建企业重名失败
-#   delete_not_exist   : 删除不存在的企业 id
-#   forbidden          : 越权 / 无权限（低权限角色调用高权限操作）
+# 业务码探测语义组：每个探测动作成功后，一次性填充一组「语义键」（含接口文档常用别名）。
+# 目的：接口文档 business_codes 里的 key（如 enterprise_name_duplicate / not_login）与
+# 探测动作（如创建重名企业）是同一语义，探测到后应同时回填，消除 _bf 查不到而退化为空壳的问题。
+_PROBE_GROUPS: dict[str, list[str]] = {
+    "unauth": ["unauth", "not_login"],                       # 未登录 / token 失效（也是自动重登开关）
+    "dup": ["dup_enterprise", "enterprise_name_duplicate"],  # 创建企业重名失败
+    "not_exist": ["delete_not_exist", "enterprise_not_exist"],  # 操作不存在的企业
+    "forbidden": ["forbidden", "no_permission"],             # 越权 / 无权限
+    "param_error": ["param_error"],                          # 参数校验失败（缺必填/格式错误）
+}
+
+# 探测得到的 SmartAdmin 业务失败信封 code 常量：所有可探测键初始为 None，探测成功后填充真实业务码。
+# _bf("key") / 生成用例 biz_fail("key") 只需 key 落在这个集合即可命中真实错误码。
+# 注意：此处必须保持显式字面量（生成侧 _read_codes_keys 依赖它做 AST 解析，推导式会解析不到）。
 SA_CODES: dict[str, int | None] = {
     "unauth": None,
+    "not_login": None,
     "dup_enterprise": None,
+    "enterprise_name_duplicate": None,
     "delete_not_exist": None,
+    "enterprise_not_exist": None,
     "forbidden": None,
+    "no_permission": None,
+    "param_error": None,
 }
+
+
+def _fill_codes(group: str, code: int | None) -> None:
+    """探测到某语义组的真实业务码后，回填该组全部语义键（含接口文档别名）。"""
+    for k in _PROBE_GROUPS.get(group, [group]):
+        SA_CODES[k] = code
 
 
 # ---------------------------------------------------------------------------
@@ -331,7 +351,7 @@ def make_sa_fixture_functions():
             r2 = raw.post(f"{base}/oa/enterprise/create", json=create_body, headers=auth)
             env2 = r2.json() if r2.status_code == 200 else None
             if isinstance(env2, dict) and env2.get("ok") is False:
-                SA_CODES["dup_enterprise"] = int(env2.get("code"))
+                _fill_codes("dup", int(env2.get("code")))
         except Exception as e:
             print(f"[SmartAdmin 错误码探测] dup_enterprise 跳过：{e}")
 
@@ -339,7 +359,7 @@ def make_sa_fixture_functions():
             r3 = raw.get(f"{base}/oa/enterprise/delete/999999999", headers=auth)
             env3 = r3.json() if r3.status_code == 200 else None
             if isinstance(env3, dict) and env3.get("ok") is False:
-                SA_CODES["delete_not_exist"] = int(env3.get("code"))
+                _fill_codes("not_exist", int(env3.get("code")))
         except Exception as e:
             print(f"[SmartAdmin 错误码探测] delete_not_exist 跳过：{e}")
 
@@ -372,12 +392,22 @@ def make_sa_fixture_functions():
                 r5 = raw_low.post(f"{base}/oa/enterprise/update", json=upd_body, headers=auth_low)
                 env5 = r5.json() if r5.status_code == 200 else None
                 if isinstance(env5, dict) and env5.get("ok") is False:
-                    SA_CODES["forbidden"] = int(env5.get("code"))
+                    _fill_codes("forbidden", int(env5.get("code")))
                 else:
-                    SA_CODES["forbidden"] = None
+                    _fill_codes("forbidden", None)
                     print("[SmartAdmin 错误码探测] 提示：低权限角色更新企业未被后端拦截（接口层未做权限控制）")
         except Exception as e:
             print(f"[SmartAdmin 错误码探测] forbidden 跳过：{e}")
+
+        try:
+            rp = raw.post(f"{base}/oa/enterprise/create",
+                          json={"contact": "探测", "contactPhone": "13800000000", "disabledFlag": False},
+                          headers=auth)  # 缺 enterpriseName/unifiedSocialCreditCode 等必填字段 → 参数校验失败
+            envp = rp.json() if rp.status_code == 200 else None
+            if isinstance(envp, dict) and envp.get("ok") is False:
+                _fill_codes("param_error", int(envp.get("code")))
+        except Exception as e:
+            print(f"[SmartAdmin 错误码探测] param_error 跳过：{e}")
 
         try:
             anon = _httpx.Client(base_url=base, timeout=10.0)
@@ -385,9 +415,9 @@ def make_sa_fixture_functions():
             anon.close()
             env4 = r4.json() if r4.status_code == 200 else None
             if isinstance(env4, dict) and env4.get("ok") is False:
-                SA_CODES["unauth"] = int(env4.get("code"))
+                _fill_codes("unauth", int(env4.get("code")))
             else:
-                SA_CODES["unauth"] = None
+                _fill_codes("unauth", None)
         except Exception as e:
             print(f"[SmartAdmin 错误码探测] unauth 跳过：{e}")
 
@@ -402,9 +432,10 @@ def make_sa_fixture_functions():
         print(
             "[SmartAdmin 错误码探测结果] "
             f"dup_enterprise={SA_CODES['dup_enterprise']}, "
-            f"delete_not_exist={SA_CODES['delete_not_exist']}, "
+            f"not_exist={SA_CODES['enterprise_not_exist']}, "
             f"forbidden={SA_CODES['forbidden']}, "
-            f"unauth={SA_CODES['unauth']}；"
+            f"unauth={SA_CODES['unauth']}, "
+            f"param_error={SA_CODES['param_error']}；"
             f"自动重登 = {SA_UNAUTHORIZED_CODES != []}"
         )
         yield

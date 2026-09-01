@@ -119,6 +119,11 @@ def _execute_async(execution_id: int, project_id: int, run_id: int, module: str)
             else:
                 st.status = "failed"
                 st.meta = {**(st.meta or {}), "error": f"最近一次执行状态为 {rec.status}，未通过"}
+                # 同步实例整体状态：手动执行失败要反映到 run.status，
+                # 否则实例停留在 success 会导致前端「一键执行」按钮被隐藏
+                run_rec = db.get(models.WorkflowRun, run_id)
+                if run_rec:
+                    run_rec.status = "failed"
                 db.commit()
         db.commit()
         task_progress.finish(pkey)

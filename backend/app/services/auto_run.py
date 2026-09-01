@@ -157,14 +157,25 @@ def _auto_run_async(run_id: int, project_id: int, mode: str = "full") -> None:
             task_progress.finish(pkey, error="实例/项目不存在")
             return
         if run.status == "success":
-            # 仅需求模式完成的实例（自动化生成/执行被跳过）允许续跑全流程；其余已完成实例直接结束
+            # 仅需求模式完成的实例（自动化生成/执行被跳过）允许续跑全流程；
+            # 存在失败阶段（如手动执行失败遗留）也允许重跑；其余已完成实例直接结束
+            stages_now = _stages(db, run_id)
             tail_skipped = any(
                 s.stage_type in ("auto_gen", "execute") and s.status == "skipped"
-                for s in _stages(db, run_id))
-            if not tail_skipped:
+                for s in stages_now)
+            has_failed = any(s.status == "failed" for s in stages_now)
+            if not tail_skipped and not has_failed:
                 step("流程已完成；如需重跑请新建流程实例")
                 task_progress.finish(pkey)
                 return
+            if has_failed:
+                # 从失败处续跑：失败阶段重置为 pending，实例状态恢复为 running
+                for s in stages_now:
+                    if s.status == "failed":
+                        s.status = "pending"
+                run.status = "running"
+                db.commit()
+                step("检测到存在失败阶段，已重置并从失败处续跑一键执行")
 
         llm_cfg = _llm_config(db, project_id)
         project = p.name
