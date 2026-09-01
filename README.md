@@ -1,7 +1,9 @@
 # AiTestPlatform · AI 驱动测试工作流平台
 
-> 从「需求上传 → 接口文档 → 生成用例 → 自动化生成 → 执行报告」整条测试链路由 AI 驱动编排，人只保留不可替代节点：**用例评审按需确认** 与 **执行确认**。
-> 不绑定任何第三方平台，每一阶段可自由选择「上传 / 粘贴 / URL / MCP 连接器 / 通用连接器」作为接入源；自动化为**声明式生成**（AI 只产出受 JSON Schema 契约约束的用例声明 → 平台确定性渲染为 pytest 脚本），对齐业界 agent 实践：**MCP 拉实据反幻觉 + Skill 固定流程与输出契约**。
+> AI 驱动「需求上传 → 接口文档 → 生成用例 → 自动化生成 → 执行报告」全链路，人只保留两次确认：**用例评审认可** 与 **执行结果确认**。
+> 环节数据可来自上传 / 粘贴 / URL / MCP / HTTP 等任意接入源；自动化用例采用**声明式生成**——AI 只输出受 JSON Schema 契约约束的用例声明，平台渲染为可执行 pytest 脚本，杜绝 AI「幻觉语法」。
+
+
 
 [![CI](https://github.com/chengguohao/ai-test-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/chengguohao/ai-test-platform/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
