@@ -32,6 +32,11 @@ class SkillSpec:
 def build_messages(spec: SkillSpec, inputs: dict) -> list[dict]:
     payload = dict(inputs)
     user = spec.user_template.format(inputs=json.dumps(payload, ensure_ascii=False, indent=2))
+    # 防回归：占位符若误写成 {{inputs}}（format 字面量转义），输入将永远不会注入，
+    # LLM 只能看到模板骨架 → 必然幻觉（2026-09-02 auto_gen 声明式重构事故）。此处硬拦。
+    if "{inputs}" in user:
+        raise ValueError(f"Skill[{spec.id}] 的 user_template 占位符写成了 {{{{inputs}}}}（双花括号是 format "
+                         "字面量转义，输入无法注入），请改为单花括号 {{inputs}}")
     return [{"role": "system", "content": spec.system_prompt},
             {"role": "user", "content": user}]
 

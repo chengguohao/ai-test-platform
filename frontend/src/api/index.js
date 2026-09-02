@@ -112,6 +112,9 @@ export const aiApi = {
   progress: (taskKey) => http.get(`/ai/progress/${encodeURIComponent(taskKey)}`),
   /* 执行失败 AI 修复闭环：分析根因 → 打回 → 自动重跑自动化生成（后台线程，立即返回） */
   autoFix: (data) => http.post('/ai/auto-fix', data),
+  /* 接口文档数据链（源头治理）：AI 分析候选 + 人工确认保存 */
+  analyzeApiDataflow: (runId, force = false) => http.post('/ai/analyze-api-dataflow', { run_id: runId, force }),
+  saveApiDataflow: (runId, dataFlow) => http.post('/ai/save-api-dataflow', { run_id: runId, data_flow: dataFlow }),
   /* 一键跑工作流：自动完成 生成用例→评审→自动化→执行→失败修复（后台线程，立即返回） */
   autoRun: (data) => http.post('/ai/auto-run', data),
   /* 流程全部完成后生成 AI 执行总结（force=true 忽略缓存重新生成） */

@@ -90,5 +90,21 @@
         "{模块专属错误码 key，如 delete_not_exist}": { "code": 10010, "message": "{错误说明，如 公告不存在}" }
       }
     }
-  ]
+  ],
+
+  "_数据链说明（数据依赖主序，2026-09-02 新增，可整节点删除）": "接口之间的本质关联是数据流（A 接口响应字段 → B 接口入参字段）。以下两项如填写，将成为用例生成步骤顺序的主序；平台也提供『自动分析 + 人工确认』（接口文档卡片里点『分析数据链』），确认后自动写入本节点：",
+  "data_flow": {
+    "order_recommended": ["IF-01", "IF-03", "IF-08", "IF-10"],
+    "interfaces": [
+      {
+        "id": "IF-08",
+        "name": "添加员工",
+        "path": "/oa/enterprise/employee/add",
+        "depends_on": ["IF-01"],
+        "field_sources": [
+          { "field": "enterpriseId", "source_interface": "IF-01", "source_path": "/data/list[0]/enterpriseId" }
+        ]
+      }
+    ]
+  }
 }

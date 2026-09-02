@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import time
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -20,6 +21,123 @@ from app.services.skill_engine import run_code_skill, run_json_skill
 from app.services.skills import SKILLS, get_skill_detail, list_skills
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
+
+
+# ---------------- 接口文档数据链（2026-09-02：源头治理） ----------------
+class AnalyzeDataflowIn(BaseModel):
+    run_id: int
+    force: bool = False   # True=忽略已确认结果强制重新分析
+
+
+class SaveDataflowIn(BaseModel):
+    run_id: int
+    data_flow: dict      # 人工确认后的数据链 {interfaces:[{id,depends_on,field_sources}], order_recommended}
+
+
+def _latest_api_doc(db: Session, run_id: int) -> models.Artifact | None:
+    """最新且未删除的接口文档工件（版本最大；删除=物理删，status 过滤防御未来软删）。"""
+    return db.query(models.Artifact).filter(
+        models.Artifact.run_id == run_id, models.Artifact.type == "api_doc",
+        models.Artifact.status == "ok").order_by(models.Artifact.version.desc()).first()
+
+
+def _api_doc_stage(db: Session, run_id: int) -> models.StageState:
+    """api_doc 阶段的 StageState（数据链确认结果存 stage.meta，Artifact 无 meta 列）。"""
+    st = (db.query(models.StageState)
+          .filter(models.StageState.run_id == run_id, models.StageState.stage_type == "api_doc")
+          .order_by(models.StageState.id.desc()).first())
+    if st is None:
+        st = models.StageState(run_id=run_id, stage_type="api_doc", stage_name="接口文档",
+                               idx=0, enabled=True, status="pending")
+        db.add(st)
+    return st
+
+
+def _load_api_doc(raw: str) -> dict | None:
+    """结构化加载接口文档：JSON 优先，YAML 兜底；非结构化（.md/.txt 摘要）返回 None。"""
+    for loader in (
+        lambda s: json.loads(s),
+        lambda s: __import__("yaml").safe_load(s),
+    ):
+        try:
+            doc = loader(raw)
+        except Exception:  # noqa: BLE001
+            continue
+        if isinstance(doc, dict) and doc.get("interfaces"):
+            return doc
+    return None
+
+
+@router.post("/analyze-api-dataflow")
+def analyze_api_dataflow(body: AnalyzeDataflowIn, db: Session = Depends(get_db)):
+    """读接口文档 artifact → 启发式产出数据链候选（响应字段→入参字段）→ 存 meta 返回。
+
+    已有确认版 meta.data_flow 时返回确认版（除非 force）；候选版存 meta.data_flow_candidates。
+    """
+    art = _latest_api_doc(db, body.run_id)
+    if not art or not art.file_path or not Path(art.file_path).exists():
+        raise HTTPException(status_code=404, detail="尚无接口文档工件，请先保存接口文档")
+    from app.services import data_flow as df_svc
+    stage = _api_doc_stage(db, body.run_id)
+
+    try:
+        raw = Path(art.file_path).read_text(encoding="utf-8", errors="ignore")
+        doc = _load_api_doc(raw)
+    except Exception:  # noqa: BLE001 防御：读文件本身异常 → 转业务错误而非 500
+        doc = None
+    if not doc:
+        raise HTTPException(
+            status_code=400,
+            detail="接口文档不是 JSON/YAML 结构化格式（当前文件无法核对字段）。"
+                   "请上传 OpenAPI JSON / YAML，或按《接口文档模板.json》保存结构化接口文档后再分析数据链。")
+    confirmed = (stage.meta or {}).get("data_flow")
+    if confirmed and not body.force:
+        return {"confirmed": True, "data_flow": confirmed,
+                "stage_id": stage.id, "source": "已确认版本"}
+
+    try:
+        prev = (stage.meta or {}).get("data_flow_candidates") or {}
+        preset = None if body.force else (
+            prev.get("interfaces") if isinstance(prev, dict) else prev)
+        candidates = df_svc.analyze_dataflow(doc, preset=preset)
+    except Exception as e:  # noqa: BLE001 兜底：分析逻辑异常 → 4xx 而非 500
+        raise HTTPException(status_code=400, detail=f"数据链分析失败：{e}")
+    meta = dict(stage.meta or {})
+    meta["data_flow_candidates"] = candidates
+    stage.meta = meta
+    db.commit()
+    return {"confirmed": False, "data_flow": candidates,
+            "stage_id": stage.id, "source": "候选（待人工确认）"}
+
+
+@router.post("/save-api-dataflow")
+def save_api_dataflow(body: SaveDataflowIn, db: Session = Depends(get_db)):
+    """保存人工确认后的数据链 → api_doc 阶段 stage.meta.data_flow（用例生成的主序来源）。
+
+    保存时按确认的 depends_on/field_sources **重算 order_recommended**（改依赖自动联动顺序），
+    人工编辑过的字段来源与依赖原样保留，只有顺序由后端重新拓扑。
+    """
+    stage = _api_doc_stage(db, body.run_id)
+    flow = body.data_flow
+    if not isinstance(flow, dict):
+        flow = {}
+    art = _latest_api_doc(db, body.run_id)
+    if art and art.file_path and Path(art.file_path).exists():
+        try:
+            doc = _load_api_doc(Path(art.file_path).read_text(encoding="utf-8", errors="ignore"))
+            if doc:
+                from app.services import data_flow as df_svc
+                rec = df_svc.analyze_dataflow(doc, preset=(flow.get("interfaces") or None))
+                flow = dict(flow)
+                flow["order_recommended"] = rec["order_recommended"]
+        except Exception:  # noqa: BLE001 重算失败不阻塞保存，保留用户填的顺序
+            pass
+    meta = dict(stage.meta or {})
+    meta["data_flow"] = flow
+    stage.meta = meta
+    db.commit()
+    return {"ok": True, "stage_id": stage.id,
+            "interfaces": len((flow or {}).get("interfaces") or [])}
 
 
 # ---------------- 任务过程进度（前端轮询「思考过程」） ----------------
@@ -492,6 +610,7 @@ def case_sets(run_id: int, db: Session = Depends(get_db)):
 class AutoGenIn(BaseModel):
     run_id: int
     project_id: int
+    target_file: str = ""   # 用户指定目标脚本文件（相对 pytest 项目根）；空=默认 test_{module}.py
 
 
 @router.post("/auto-generate")
@@ -512,13 +631,13 @@ def auto_generate(body: AutoGenIn, db: Session = Depends(get_db)):
         raise HTTPException(422, "自动化生成正在进行中，请等待完成")
     threading.Thread(
         target=_auto_generate_async,
-        args=(body.run_id, body.project_id),
+        args=(body.run_id, body.project_id, body.target_file),
         daemon=True, name=f"auto-gen-{body.run_id}",
     ).start()
     return {"message": "自动化生成已启动：全量重新生成用例，过程见下方思考过程面板", "started": True}
 
 
-def _auto_generate_async(run_id: int, project_id: int) -> None:
+def _auto_generate_async(run_id: int, project_id: int, target_file: str = "") -> None:
     """后台线程：全量覆盖生成自动化用例（进度见 auto_gen:{run_id}）。"""
     from app.db import SessionLocal
     from app.api.workflow import complete_stage_by_type, mark_stage_status
@@ -547,7 +666,8 @@ def _auto_generate_async(run_id: int, project_id: int) -> None:
                 return
         mark_stage_status(db, run_id, "auto_gen", "running")
         out = auto_gen_svc.generate(db, run_id, p.engine_config or {}, p.name,
-                                    llm_config=_project_llm_config(db, project_id))
+                                    llm_config=_project_llm_config(db, project_id),
+                                    target_file=target_file)
         # 持久化生成结果到 auto_gen 阶段 meta：抽屉重开 / 刷新页面都能回显
         st = db.execute(select(models.StageState).where(
             models.StageState.run_id == run_id,
@@ -555,6 +675,12 @@ def _auto_generate_async(run_id: int, project_id: int) -> None:
         ).scalars().first()
         if st:
             new_meta = {**(st.meta or {}), "auto_result": out}
+            # 目标文件：用户显式填写则固化到 meta（执行报告据此只跑该文件）；
+            # 用户清空（回到默认）则移除旧值，让执行报告回到「跑整个模块目录」的默认行为。
+            if (target_file or "").strip():
+                new_meta["target_file"] = out.get("target_file") or target_file.strip()
+            else:
+                new_meta.pop("target_file", None)
             # 清掉历史 failed 状态遗留的 error 字段，避免 UI 误显示失败原因
             new_meta.pop("error", None)
             st.meta = new_meta

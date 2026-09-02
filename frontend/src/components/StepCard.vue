@@ -47,15 +47,29 @@ const STATUS_TEXT = {
   failed: '失败',
   returned: '打回',
   pending_review: '待评审',
-  skipped: '已跳过'
+  skipped: '已跳过',
+  dataflow_pending: '待分析'
 }
 
 const isSuccess = computed(() => props.stage.status === 'success')
 const isRunning = computed(() => props.stage.status === 'running')
 const isMuted = computed(() => props.stage.enabled === false || props.stage.status === 'skipped')
+
+/* api_doc 卡片的「数据链状态」优先于阶段状态显示（2026-09-02）：
+   保存工件场景（meta.data_flow_state='none'）：保存后未分析 →「待分析」→ 分析 →「候选待确认」→ 确认 →「已完成」。
+   已有工件场景（无 'none' 标记）：不显示待分析，直接 分析 →「候选待确认」→ 确认 →「已完成」。 */
+const apiFlowBadge = computed(() => {
+  if (props.stage.stage_type !== 'api_doc') return null
+  const m = props.stage.meta || {}
+  if (m.data_flow) return null                        // 已确认：走原状态（success=已完成）
+  if (m.data_flow_candidates) return { text: '候选待确认', cls: 'pending_review' }
+  if (m.data_flow_state === 'none') return { text: '待分析', cls: 'pending' }
+  return null
+})
 const isDanger = computed(() => props.stage.status === 'failed' || props.stage.status === 'returned')
 
-const statusText = computed(() => STATUS_TEXT[props.stage.status] || props.stage.status || '未知')
+const statusText = computed(
+  () => apiFlowBadge.value?.text || STATUS_TEXT[props.stage.status] || props.stage.status || '未知')
 const desc = computed(() => DESC[props.stage.stage_type] || '')
 
 /* 生成用例阶段的组合状态文案：按业务/接口两类的生成+评审状态拼装。
@@ -86,7 +100,7 @@ const pendingReviewText = computed(() => {
   if (pending.length === 0) return '用例已生成，待评审'
   return pending.map((t) => `${CASE_LABEL[t]}待评审`).join('，')
 })
-const statusClass = computed(() => props.stage.status || 'pending')
+const statusClass = computed(() => apiFlowBadge.value?.cls || props.stage.status || 'pending')
 const cardClass = computed(() => ({
   'is-selected': props.selected,
   'is-running': isRunning.value,

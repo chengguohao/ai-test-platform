@@ -339,6 +339,11 @@ def sync_case_gen_status(db: Session, run_id: int) -> None:
                 "case_gen_summary": summary}
         meta.pop("error", None)   # 清掉历史失败遗留的 error
         st.meta = meta
+        # 阶段回到待评审 = 流程不再已完成：实例状态同步降级（原可能遗留为 success），
+        # 避免看板仍显示「已完成」、旧 AI 执行总结残留、以及误触发总结生成（422 报「流程尚未全部完成」）
+        run = db.get(models.WorkflowRun, run_id)
+        if run and run.status in ("success",):
+            run.status = "pending"
         db.commit()
     elif all(s == "approved" for s in summary.values()) and summary:
         try:

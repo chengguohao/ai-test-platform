@@ -185,10 +185,98 @@
           <pre class="code-block fetched-preview">{{ apiFetched.text }}</pre>
         </div>
 
-        <el-button type="primary" class="mt8" :loading="savingApi" @click="saveApiDoc">
-          <el-icon style="margin-right: 4px"><Upload /></el-icon>保存接口文档工件
-        </el-button>
-        <el-button class="mt8" @click="skipStage">跳过此阶段</el-button>
+        <div class="row-actions mt8">
+          <el-button type="primary" :loading="savingApi" @click="saveApiDoc">
+            <el-icon style="margin-right: 4px"><Upload /></el-icon>保存接口文档工件
+          </el-button>
+          <el-button @click="skipStage">跳过此阶段</el-button>
+        </div>
+
+        <!-- 接口文档数据链（源头治理：AI 候选 + 人工确认 → 用例生成顺序主序） -->
+        <div v-if="hasApiDoc" class="dataflow-box mt8">
+          <div class="block-title" style="margin-top: 0">数据链（接口执行顺序主序）</div>
+          <div v-if="hasApiDoc && !dataFlowConfirmed" class="form-hint mt8" style="color: #e6a23c">
+            ⚠ 数据链还未确认（顶部卡片会显示「待分析」或「候选待确认」直至确认保存）。
+            为让自动化用例按「分页反查 id → 子功能引用父 id → 最后删除」编排，建议完成下面分析并确认保存。
+          </div>
+          <div class="form-hint">
+            识别规则：只把「ID 类字段」（xxxId，如 enterpriseId；含<em>列表型</em> xxxIdList，如 employeeIdList）的跨接口引用当数据链——
+            比如「添加员工」要传的 enterpriseId，来自「分页查询企业」响应的 list[0].enterpriseId；
+            「删除员工」的 employeeIdList（员工 ID 列表），来自「查询员工列表」响应的 list[].employeeId（取 1 个/多个元素 id 填数组）。
+            新建/编辑时<em>页面录入</em>的企业名称、类型等业务属性不是数据链，不会识别。
+            下面的来源与依赖都可以改，保存后勾选的执行顺序会自动按依赖重算。
+          </div>
+          <div class="row-actions mt8">
+            <el-button size="small" :loading="analyzingFlow" @click="analyzeDataFlow">
+              分析数据链
+            </el-button>
+            <el-button size="small" type="success" plain :disabled="!dataFlow" :loading="savingFlow" @click="saveDataFlow">
+              确认并保存为用例顺序
+            </el-button>
+            <el-button size="small" v-if="dataFlowConfirmed" @click="analyzeDataFlow" :loading="analyzingFlow">
+              重新分析
+            </el-button>
+          </div>
+
+          <template v-if="dataFlow && dataFlow.interfaces && dataFlow.interfaces.length">
+            <el-table ref="flowTableRef" :data="tableRows" size="small" border class="mt8" :row-key="(r) => r.id">
+              <el-table-column label="#" width="58">
+                <template #default="{ $index }">
+                  <span class="muted drag-item drag-handle" style="cursor: grab; user-select: none" title="拖动调整顺序">
+                    ⠿ {{ $index + 1 }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="id" label="接口" width="70" />
+              <el-table-column label="名称/路径" min-width="220">
+                <template #default="{ row }">
+                  <div>{{ row.name }}</div>
+                  <div class="muted small">{{ row.path }}</div>
+                </template>
+              </el-table-column>
+              <el-table-column label="前置接口（depends_on）" min-width="170">
+                <template #default="{ row }">
+                  <el-select
+                    v-model="row.depends_on"
+                    multiple
+                    size="small"
+                    placeholder="无前置依赖"
+                    style="width: 100%"
+                  >
+                    <el-option v-for="o in dataFlow.interfaces" :key="o.id" :label="o.id + ' ' + o.name" :value="o.id" />
+                  </el-select>
+                </template>
+              </el-table-column>
+              <el-table-column label="入参字段来源（data_source，可编辑）" min-width="260">
+                <template #default="{ row }">
+                  <div v-if="row.field_sources && row.field_sources.length">
+                    <div v-for="(fs, i) in row.field_sources" :key="i" class="fs-line" style="display:flex; align-items:center; gap:4px; margin-bottom:2px">
+                      <el-input v-model="fs.field" size="small" style="width: 120px; flex-shrink:0" placeholder="ID字段名" />
+                      <span class="muted" style="flex-shrink:0">←</span>
+                      <el-select v-model="fs.source_interface" size="small" style="width: 118px" placeholder="来源接口">
+                        <el-option v-for="o in dataFlow.interfaces" :key="o.id" :label="o.id" :value="o.id" />
+                      </el-select>
+                      <el-tag v-if="fs.list" size="small" type="warning" effect="plain" style="flex-shrink:0">列表元素</el-tag>
+                      <code class="muted small" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ fs.source_path }}</code>
+                      <el-button link type="danger" size="small" @click="row.field_sources.splice(i, 1)">删</el-button>
+                    </div>
+                  </div>
+                  <span v-else class="muted small">无（未引用其它接口产出的 ID 字段）</span>
+                  <div class="mt4">
+                    <el-button link type="primary" size="small" @click="addFieldSource(row)">+ 添加来源</el-button>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div class="form-hint mt8 small">
+              顺序 =「被依赖的接口在前 + 创建类在前 + 删除类在后」，由后端按你确认的依赖自动拓扑。
+              确认保存后，自动化用例将按此顺序 + 每个接口内部的增改删定义生成步骤。
+            </div>
+          </template>
+          <div v-else-if="hasApiDoc && !analyzingFlow" class="form-hint mt8">
+            尚未分析。点「分析数据链」生成候选依赖（纯确定性字段比对，无 AI 费时）。
+          </div>
+        </div>
 
         <div class="mt8">
           <div class="block-title">已有接口工件</div>
@@ -385,15 +473,30 @@
           class="mb8"
           :title="`本实例已经历 ${stage.meta.fix_rounds} 轮 AI 自动修复${stage.meta.fix_analysis ? '，最近结论：' + (stage.meta.fix_analysis.overall_conclusion || '') : ''}`"
         />
-        <el-button type="primary" :loading="autoGenerating" @click="autoGenerate">
-          <el-icon style="margin-right: 4px"><MagicStick /></el-icon>生成自动化用例
-        </el-button>
+        <div class="row-actions" style="align-items:center">
+          <el-button type="primary" :loading="autoGenerating" @click="autoGenerate">
+            <el-icon style="margin-right: 4px"><MagicStick /></el-icon>生成自动化用例
+          </el-button>
+          <!-- 目标脚本文件：用户指定则生成到该文件，执行报告也只跑该文件；留空=默认 test_{module}.py -->
+          <el-input
+            v-model="targetFile"
+            class="target-file-input"
+            size="default"
+            placeholder="目标脚本文件（留空=默认 test_{module}.py）"
+            clearable
+          >
+            <template #prepend>目标文件</template>
+          </el-input>
+        </div>
+        <div class="form-hint" style="margin-top:6px; color:#909399">
+          可指定目标脚本文件名（如 test_ent2.py，存于被测系统模块目录）或相对 pytest 项目根的路径；重复生成时会覆盖该文件、执行报告只执行该文件。留空按默认行为。
+        </div>
         <el-alert
           v-if="stage.meta?.auto_result || autoResult"
           type="warning"
           :closable="false"
           class="mt8"
-          title="再次点击「生成自动化用例」将基于最新需求与接口文档全量重新生成并覆盖旧脚本"
+          title="再次点击「生成自动化用例」将基于最新需求与接口文档全量重新生成并覆盖目标脚本"
         />
 
         <!-- 生成进度条 + 思考过程：LLM 生成耗时较长，给用户可视反馈 -->
@@ -457,13 +560,34 @@
           <el-button :loading="envChecking" @click="envCheck">
             <el-icon style="margin-right: 4px"><Monitor /></el-icon>环境自检
           </el-button>
-          <el-button type="primary" :loading="executing" @click="execRun">
-            <el-icon style="margin-right: 4px"><VideoPlay /></el-icon>执行测试
-          </el-button>
+          <el-tooltip :disabled="autoGenDone" placement="top" :content="'需「自动化生成」阶段已完成（生成自动化用例）后，才能执行测试'">
+            <el-button type="primary" :loading="executing" :disabled="!autoGenDone" @click="execRun">
+              <el-icon style="margin-right: 4px"><VideoPlay /></el-icon>执行测试
+            </el-button>
+          </el-tooltip>
           <el-button :disabled="!allureUrl" @click="openAllure">
             <el-icon style="margin-right: 4px"><Link /></el-icon>打开 Allure 报告
           </el-button>
         </div>
+        <!-- 目标脚本文件：留空=跑整个模块目录（默认）；填写=只执行该文件（自动化生成时指定的目标会自动带过来） -->
+        <el-input
+          v-model="execTargetFile"
+          class="target-file-input mt8"
+          placeholder="目标脚本文件（留空=执行模块目录下全部脚本）"
+          clearable
+        >
+          <template #prepend>目标文件</template>
+        </el-input>
+        <div class="form-hint" style="margin-top:4px; color:#909399">
+          默认执行整个模块目录下的全部脚本；填写目标文件后只执行该文件（自动化生成页填过的目标文件会自动带到这里）。
+        </div>
+        <el-alert
+          v-if="!autoGenDone"
+          type="info"
+          :closable="false"
+          class="mt8"
+          title="「执行测试」需在「自动化生成」阶段已完成之后才能使用：请先到「自动化生成」阶段生成自动化用例。"
+        />
 
         <div v-if="envItems.length" class="mt8">
           <div class="block-title">环境自检结果</div>
@@ -625,8 +749,9 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import Sortable from 'sortablejs'
 import UploadZone from './UploadZone.vue'
 import CaseTree from './CaseTree.vue'
 import CaseTable from './CaseTable.vue'
@@ -645,7 +770,9 @@ const props = defineProps({
   modelValue: { type: Boolean, default: false },
   project: { type: Object, default: null },
   run: { type: Object, default: null },
-  stage: { type: Object, default: null }
+  stage: { type: Object, default: null },
+  /* 实例全部阶段（供「执行测试」校验自动化生成阶段是否已完成） */
+  stages: { type: Array, default: () => [] }
 })
 
 const emit = defineEmits(['update:modelValue', 'changed'])
@@ -944,6 +1071,99 @@ const apiUrlLoading = ref(false)
 const apiConnLoading = ref(false)
 const savingApi = ref(false)
 
+/* ---------- 接口文档数据链（AI 候选 + 人工确认） ---------- */
+const dataFlow = ref(null)          // 当前展示的数据链（候选或已确认）
+const dataFlowConfirmed = ref(false)
+const analyzingFlow = ref(false)
+const savingFlow = ref(false)
+
+/* 按 order_recommended 排序展示（接口文档卡片检查用）；用户拖拽后以手动顺序为准 */
+const flowTableRef = ref(null)
+const flowSortable = ref(null)
+const userRearranged = ref(false)   // 用户拖拽过：展示与保存均以表格当前顺序为主
+
+const tableRows = computed(() => {
+  const fl = dataFlow.value
+  if (!fl || !fl.interfaces || !fl.interfaces.length) return []
+  if (userRearranged.value) return fl.interfaces   // 手动排序优先：数组序即展示序
+  const order = fl.order_recommended || []
+  const list = [...fl.interfaces]
+  return [...order].reverse().reduce((acc, id) => {
+    const i = list.findIndex((x) => x.id === id)
+    if (i >= 0) acc.unshift(list.splice(i, 1)[0])
+    return acc
+  }, list)
+})
+
+/* el-table 行拖拽（sortablejs 挂到 tbody，handle=第一列 ⠿）：拖完按 DOM 顺序重排源数组 */
+function setupFlowDrag() {
+  if (flowSortable.value) { flowSortable.value.destroy(); flowSortable.value = null }
+  const tbody = flowTableRef.value && flowTableRef.value.$el
+    ? flowTableRef.value.$el.querySelector('.el-table__body-wrapper tbody') : null
+  if (!tbody || !dataFlow.value || !dataFlow.value.interfaces || !dataFlow.value.interfaces.length) return
+  flowSortable.value = Sortable.create(tbody, {
+    handle: '.drag-handle',
+    animation: 150,
+    onEnd: () => {
+      const ids = Array.from(tbody.querySelectorAll('tr'))
+        .map((tr) => tr.dataset?.rowKey || tr.children?.[1]?.textContent?.trim())
+        .filter(Boolean)
+      const src = dataFlow.value.interfaces
+      if (ids.length === src.length) {
+        const map = new Map(src.map((r) => [r.id, r]))
+        dataFlow.value.interfaces = ids.map((id) => map.get(id)).filter(Boolean)
+        userRearranged.value = true
+      }
+    }
+  })
+}
+watch(tableRows, () => nextTick(setupFlowDrag))
+onMounted(() => nextTick(setupFlowDrag))
+onBeforeUnmount(() => { if (flowSortable.value) flowSortable.value.destroy() })
+
+async function analyzeDataFlow() {
+  if (!props.run) return
+  analyzingFlow.value = true
+  try {
+    const r = await aiApi.analyzeApiDataflow(props.run.id)
+    dataFlow.value = r.data_flow
+    dataFlowConfirmed.value = !!r.confirmed
+    ElMessage.success(dataFlowConfirmed.value ? '已读取已确认的数据链' : '候选已生成，请在表格中核对/修正后确认保存')
+    emit('changed')
+  } catch (e) {
+    ElMessage.error('数据链分析失败：' + (e && e.message))
+  } finally {
+    analyzingFlow.value = false
+  }
+}
+
+function addFieldSource(row) {
+  if (!row.field_sources) row.field_sources = []
+  row.field_sources.push({ field: '', expr: '', source_interface: '', source_path: '/data/…/xxxId', confidence: 'manual' })
+}
+
+/* 从 stage.meta 回显数据链状态：meta.data_flow=已确认；data_flow_candidates=候选；都无=待分析 */
+function syncApiFlowStatus() {
+  const m = (props.stage && props.stage.meta) || {}
+  if (m.data_flow) dataFlowConfirmed.value = true
+  else dataFlowConfirmed.value = false
+}
+
+async function saveDataFlow() {
+  if (!props.run || !dataFlow.value) return
+  savingFlow.value = true
+  try {
+    await aiApi.saveApiDataflow(props.run.id, dataFlow.value)
+    dataFlowConfirmed.value = true
+    ElMessage.success('数据链已确认保存，后续自动化用例将按此顺序编排')
+    emit('changed')
+  } catch (e) {
+    ElMessage.error('保存失败：' + (e && e.message))
+  } finally {
+    savingFlow.value = false
+  }
+}
+
 async function fetchApiUrl() {
   if (!apiUrl.value.trim()) return ElMessage.warning('请填写 URL')
   apiUrlLoading.value = true
@@ -979,6 +1199,11 @@ async function saveApiDoc() {
     } else {
       ElMessage.warning('请先选择文件或拉取内容')
     }
+    // 新文档已由后端作废旧数据链：本地同步回到「待分析」态，避免残留旧表格误导
+    dataFlow.value = null
+    dataFlowConfirmed.value = false
+    userRearranged.value = false
+    emit('changed')
   } finally {
     savingApi.value = false
   }
@@ -1082,6 +1307,33 @@ function previewCaseSet(cs) {
 
 /* 当前类型最新用例集是否已评审通过（approved）——代表已人工检查过 */
 const currentReviewed = computed(() => typedCaseSets.value[0]?.status === 'approved')
+
+/* 「评审通过」按钮置灰误导修复：
+   caseType（业务/接口 radio）在本组件内持久化，关抽屉不清空。
+   若用户上次停在「接口测试用例」页，重新生成业务用例后再打开抽屉，
+   按钮仍按接口类型判断（最新接口用例集已评审通过）→ 显示「已评审通过」置灰，
+   而卡片上却提示「业务用例待评审」，需要刷新页面才恢复可点。
+   修复：当「当前选中类型的最新用例集已评审通过、另一类型正处于待评审」时，
+   自动把 caseType 切到待评审类型（重新生成/评审/打开抽屉时同步调用）。 */
+function syncCaseTypeToPending() {
+  if (props.stage?.stage_type !== 'case_gen') return
+  const summary = props.stage?.meta?.case_gen_summary
+  if (!summary) return
+  const curStatus = typedCaseSets.value[0]?.status
+  if (curStatus !== 'approved') return   // 当前类型还有东西待评审/未加载完：不需要切换
+  for (const t of ['business', 'api']) {
+    if (t !== caseType.value && summary[t] === 'pending_review') {
+      caseType.value = t
+      return
+    }
+  }
+}
+
+/* 抽屉内重新生成/评审后 stage.meta.case_gen_summary 变化 → 实时对齐待评审类型 */
+watch(
+  () => props.stage?.meta?.case_gen_summary,
+  () => syncCaseTypeToPending()
+)
 
 /* 按当前用例类型导出对应用例集（业务/接口互不混淆），复用 /ai/export */
 async function exportCases(format) {
@@ -1288,6 +1540,21 @@ async function runMcpFetch() {
 /* ---------- auto_gen ---------- */
 const autoGenerating = ref(false)
 const autoResult = ref(null)
+/* 接口文档数据链确认状态（源：api_doc 阶段 stage.meta.data_flow）。
+   已上传接口文档但未确认时，「生成自动化用例」弹框提示阻止（仍可强制生成）。 */
+const apiDocStage = computed(() => (props.stages || []).find((s) => s.stage_type === 'api_doc'))
+const apiFlowConfirmed = computed(() => !!apiDocStage.value?.meta?.data_flow)
+/* 目标脚本文件（用户指定；留空=默认 test_{module}.py）。生成成功后后端会把相对路径固化为
+   stage.meta.target_file，重开抽屉自动回显，并自动带到执行报告页。 */
+const targetFile = ref('')
+
+function syncTargetFileEcho() {
+  if (props.stage?.stage_type !== 'auto_gen') return
+  // 优先 meta 固化值（用户显式指定过的）；无则回退生成结果里的归一化路径
+  targetFile.value = props.stage.meta?.target_file
+    || autoResult.value?.target_file
+    || ''
+}
 
 function _sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -1307,7 +1574,27 @@ async function waitAutoGenDone() {
 }
 
 async function autoGenerate() {
-  // 前置校验：已上传接口文档时必须已有「评审通过」的接口测试用例集，否则提示先去评审
+  // 前置校验①：已上传接口文档但数据链未确认 → 弹框提示阻止（默认阻止，可选「仍要生成」逃生）
+  if (apiArtifacts.value.length > 0 && !apiFlowConfirmed.value) {
+    try {
+      await ElMessageBox.confirm(
+        '接口文档的数据链尚未确认保存。\n\n' +
+        '未确认时，生成的自动化用例顺序将由 AI 自行推断，可能与真实接口依赖不一致，导致脚本执行失败。\n\n' +
+        '建议先到「接口文档」阶段点「分析数据链」，在表格中核对依赖与字段来源后点「确认并保存为用例顺序」，再回来生成。',
+        '接口数据链未完成',
+        {
+          type: 'warning',
+          confirmButtonText: '仍要生成',
+          cancelButtonText: '去确认数据链',
+          closeOnClickModal: false,
+          closeOnPressEscape: false
+        }
+      )
+    } catch {
+      return  // 用户选择「去确认数据链」/关闭 → 阻止生成
+    }
+  }
+  // 前置校验②：已上传接口文档时必须已有「评审通过」的接口测试用例集，否则提示先去评审
   if (apiArtifacts.value.length > 0) {
     const hasApprovedApi = caseSets.value.some((cs) => csType(cs) === 'api' && cs.status === 'approved')
     if (!hasApprovedApi) {
@@ -1322,7 +1609,11 @@ async function autoGenerate() {
   notifyRunning()
   try {
     // 后端已改后台线程模式：接口立即返回，生成在后台跑，前端轮询进度直到完成
-    const r = await aiApi.autoGenerate({ run_id: props.run.id, project_id: props.project?.id })
+    const r = await aiApi.autoGenerate({
+      run_id: props.run.id,
+      project_id: props.project?.id,
+      target_file: targetFile.value.trim()
+    })
     ElMessage.success(r.message || '自动化生成已启动')
     await waitAutoGenDone()
     await loadArtifacts()  // 刷新生成脚本 + 生成日志工件
@@ -1343,6 +1634,51 @@ const envChecking = ref(false)
 const executing = ref(false)
 const envItems = ref([])
 const execResult = ref(null)
+/* 目标脚本文件（执行用）：留空=跑整个模块目录；填写=只跑该文件。
+   自动化生成页指定的目标文件已固化在 auto_gen 阶段 meta，打开本抽屉时自动带过来。 */
+const execTargetFile = ref('')
+
+/* 从 auto_gen 阶段 meta 回显目标文件（自动生成页指定后，执行报告默认沿用同一文件） */
+function syncExecTargetEcho() {
+  const st = (props.stages || []).find((s) => s.stage_type === 'auto_gen')
+  // 仅当用户没有手动改过该输入时才回显/接管，避免覆盖用户当场填写的内容
+  if (!execTargetFile.value) {
+    execTargetFile.value = (st?.meta?.target_file) || ''
+  }
+}
+
+/* 执行测试前置门槛：自动化生成阶段须已完成（success）；未完成（含 skipped/失败/待处理）则禁用按钮 */
+const autoGenDone = computed(() => {
+  const st = (props.stages || []).find((s) => s.stage_type === 'auto_gen')
+  return st?.status === 'success'
+})
+
+/* 执行结果兜底回显：执行结果只存在执行记录表（execution_runs），不进阶段 meta。
+   关抽屉/跳页后 execResult 被清空，重开「执行报告」抽屉时自动拉取该实例最近一次
+   执行详情回显，避免「执行结果下面（逐用例结果/错误日志/AI 修复闭环）」内容消失。 */
+async function echoExecResult() {
+  if (props.stage?.stage_type !== 'execute' || !props.run) return
+  try {
+    const execs = await execApi.runs(props.run.id)
+    if (!execs.length) return
+    const d = await execApi.detail(execs[0].id)
+    execResult.value = d
+    if (!envItems.value.length) envItems.value = d?.env_check?.items || []
+    // AI 修复闭环结果存在 auto_gen 阶段 meta：一并恢复（失败执行下的修复框/分析结论）
+    try {
+      const autoSt = (props.stages || []).find((s) => s.stage_type === 'auto_gen')
+      const meta = autoSt?.meta || {}
+      if (meta.fix_analysis) {
+        fixResult.value = {
+          message: 'AI 修复流程已完成（回显历史分析结论）',
+          analysis: meta.fix_analysis,
+          fix_round: meta.fix_rounds || 0,
+          regenerated: true
+        }
+      }
+    } catch { /* 阶段数据缺失不阻塞执行结果回显 */ }
+  } catch { /* 拉取失败静默：不阻塞抽屉打开 */ }
+}
 
 const allureUrl = computed(() =>
   props.project && props.run ? allureReportUrl(props.project.name, props.run.id) : ''
@@ -1373,7 +1709,12 @@ async function execRun() {
   startThink(`execute:${props.run.id}`)
   notifyRunning()   // 后端 POST /run 入口已置 execute 阶段 running，看板立刻显示「执行中」
   try {
-    const r = await execApi.run({ run_id: props.run.id, module, project_id: props.project.id })
+    const r = await execApi.run({
+      run_id: props.run.id,
+      module,
+      project_id: props.project.id,
+      target_file: execTargetFile.value.trim()
+    })
     const first = r.result || r
     if (first.status === 'running' && first.message && first.message.includes('轮询')) {
       // 后台执行模式：拿 execution_id 轮询直到结束
@@ -1487,6 +1828,7 @@ function onOpen() {
       // 自动化生成结果持久化在阶段 meta 里：离开页面再进也能回显
       if (props.stage?.stage_type === 'auto_gen' && props.stage.meta?.auto_result) {
         autoResult.value = props.stage.meta.auto_result
+        syncTargetFileEcho()   // 回显目标文件（meta 固化值优先）
       }
       // 需求摘要同样持久化在阶段 meta：重开抽屉 / 刷新页面后回显，不再丢失
       if (props.stage?.stage_type === 'requirement' && props.stage.meta?.summary) {
@@ -1495,8 +1837,22 @@ function onOpen() {
       // 生成进行中恢复：以 task_progress key（exists && !done）为唯一事实，函数内部自判，
       // 不依赖易过期的 stage.status。切卡/刷新/重开抽屉通用：进行中 → 恢复进度条+思考过程，
       // 已结束 → 直接跳过（此时结果已由 meta / 用例集列表回显）。
-      if (props.stage?.stage_type === 'auto_gen') resumeAutoGen()
-      if (props.stage?.stage_type === 'case_gen') resumeCaseGen()
+      if (props.stage?.stage_type === 'auto_gen') {
+        resumeAutoGen()
+        syncTargetFileEcho()
+      }
+      if (props.stage?.stage_type === 'case_gen') {
+        resumeCaseGen()
+        // 用例集已加载完：对齐到待评审类型（避免上次停在接口页导致「评审通过」按钮置灰误导）
+        syncCaseTypeToPending()
+      }
+      // 执行报告抽屉：从执行记录表回显最近一次执行结果（关抽屉/跳页后内容不丢）
+      if (props.stage?.stage_type === 'execute') {
+        echoExecResult()
+        syncExecTargetEcho()   // 沿用自动化生成页指定的目标文件
+      }
+      // 接口文档卡片：从 stage.meta 回显数据链状态（已确认/候选/未分析），不自动拉表格数据
+      if (props.stage?.stage_type === 'api_doc') syncApiFlowStatus()
     })
     .finally(() => {
       if (seq === openSeq) loading.value = false
@@ -1641,13 +1997,22 @@ function csStatus(s) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 0 12px;
-  margin-bottom: 4px;
+  padding: 14px 20px 12px;
+  /* 横向 padding 抵消 .stage-panel 的 20px 横向内边距：sticky header 必须覆盖到边缘，
+     否则滚动到边缘时左右会露出内容边缘 1px 的"漏缝"。 */
+  margin: 0 -20px 4px;
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   background: var(--card, #fff);
-  z-index: 1;
+  /* 提升层级：sticky header 之上不要让任何内部块（包括 el-alert、.summary-stats、
+     .el-table 行、.code-block 错误日志等）滑入被遮。z-index=1 时被 z-index 自增的元素
+     覆盖，统一提升到 5 让所有子内容都不再能爬到 header 之上。 */
+  z-index: 5;
+  /* 关键修复：sticky header 的下边缘投影，给下方内容留出"接缝"视觉空间，
+     避免「执行失败/逐用例结果/错误日志」等区块滚到 header 下沿时被半透明遮住
+     出现"标题栏与下方内容重叠"的视觉错觉。 */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
 }
 
 .panel-title {
@@ -1705,6 +2070,11 @@ function csStatus(s) {
   gap: 8px;
   margin-top: 8px;
   flex-wrap: wrap;
+}
+
+/* 目标脚本文件输入框（自动化生成 / 执行报告抽屉共用） */
+.target-file-input {
+  max-width: 460px;
 }
 
 .fetched-box {

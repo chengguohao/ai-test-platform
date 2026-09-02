@@ -37,6 +37,13 @@ def _stages(db: Session, run_id: int) -> list[models.StageState]:
         models.StageState.run_id == run_id).order_by(models.StageState.idx)).scalars().all()
 
 
+def _stage(db: Session, run_id: int, stage_type: str) -> models.StageState | None:
+    """按类型取某个阶段（execute 分支取 auto_gen 阶段 meta 的目标文件用）。"""
+    return db.execute(select(models.StageState).where(
+        models.StageState.run_id == run_id,
+        models.StageState.stage_type == stage_type).limit(1)).scalars().first()
+
+
 def _advance_stage(db: Session, run: models.WorkflowRun, st: models.StageState) -> None:
     """把当前阶段置 success，并推进下一个 pending 阶段为 running（编排内部使用，不做前置校验）。"""
     st.status = "success"
@@ -86,7 +93,8 @@ def check_ready(db: Session, run_id: int) -> tuple[bool, str, str]:
 
 # ---------------- 执行提交与等待（复用 execution API 后台线程） ----------------
 
-def submit_execution(db: Session, p: models.Project, run_id: int, module: str) -> int:
+def submit_execution(db: Session, p: models.Project, run_id: int, module: str,
+                     target_file: str = "") -> int:
     """创建 running 执行记录并启动后台 pytest 线程，返回 execution_id。"""
     from app.api.execution import _execute_async  # 延迟导入：api 层可能仍在加载
     from app.config import workspace_for
@@ -105,7 +113,7 @@ def submit_execution(db: Session, p: models.Project, run_id: int, module: str) -
     db.refresh(rec)
     threading.Thread(
         target=_execute_async,
-        args=(rec.id, p.id, run_id, module),
+        args=(rec.id, p.id, run_id, module, target_file),
         daemon=True, name=f"pytest-exec-{rec.id}",
     ).start()
     return rec.id
@@ -271,11 +279,15 @@ def _auto_run_async(run_id: int, project_id: int, mode: str = "full") -> None:
 
             elif t == "auto_gen":
                 step("⑤ 自动化生成：AI 正在生成 pytest 脚本（约 1~3 分钟）…")
+                # 用户显式指定的目标文件优先（auto_gen 阶段 meta 里固化过）；一键执行沿用同一目标
+                target_file = (st.meta or {}).get("target_file", "")
                 out = auto_gen_svc.generate(db, run_id, p.engine_config or {}, project,
-                                            llm_config=llm_cfg)
+                                            llm_config=llm_cfg, target_file=target_file)
                 step(f"⑤ 自动化脚本已生成 → {out.get('target', '')}")
                 # 生成结果回显到阶段 meta（抽屉重开可见）
                 st.meta = {**(st.meta or {}), "auto_result": out}
+                if (target_file or "").strip():
+                    st.meta["target_file"] = out.get("target_file") or target_file.strip()
                 db.commit()
                 _advance_stage(db, run, st)
 
@@ -285,8 +297,12 @@ def _auto_run_async(run_id: int, project_id: int, mode: str = "full") -> None:
                 cs = (db.query(models.CaseSet).filter(models.CaseSet.run_id == run_id)
                       .order_by(models.CaseSet.version.desc()).first())
                 module = (cs.content or {}).get("module", "module") if cs else "module"
-                step(f"⑥ 执行测试：提交 pytest 执行（模块 {module}）…")
-                eid = submit_execution(db, p, run_id, module)
+                # 目标文件：沿用自动化生成时用户指定的文件（只跑该文件）；未指定则跑整个模块目录
+                st_auto = _stage(db, run_id, "auto_gen")
+                target_file = (st_auto.meta or {}).get("target_file", "") if st_auto else ""
+                step(f"⑥ 执行测试：提交 pytest 执行（模块 {module}"
+                     + (f"，目标文件 {target_file}" if target_file else "") + "）…")
+                eid = submit_execution(db, p, run_id, module, target_file)
                 rec = wait_execution(db, eid)
                 if not rec:
                     step("⑥ 执行等待超时，请到执行报告页查看结果")

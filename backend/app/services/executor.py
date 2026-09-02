@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from app.config import settings
-from app.services.system_profile import collect_system_profile
+from app.services.system_profile import collect_system_profile, resolve_target_file
 
 
 def _read_pytest_env(project_dir: Path) -> dict:
@@ -77,14 +77,15 @@ def env_check(engine: dict) -> dict:
 
 
 # ---------------- pytest 执行 ----------------
-def run_pytest(engine: dict, module: str, run_workspace: Path) -> dict:
-    """在 pytest-bdd 项目里子进程跑 tests/api/{module}，落 allure-results + junitxml。"""
+def run_pytest(engine: dict, module: str, run_workspace: Path, target_file: str = "") -> dict:
+    """在 pytest-bdd 项目里子进程跑 tests/api/{module}，落 allure-results + junitxml。
+
+    target_file：用户指定目标脚本文件（相对 pytest 项目根路径），空 = 默认执行整个模块目录（现状不变）。
+    """
     project_dir = Path(engine.get("pytest_project_dir") or settings().PYTEST_PROJECT_DIR)
     python = engine.get("python") or str(settings().PYTEST_PYTHON)
-    allure_dir = run_workspace / "allure-results"
-    junit = run_workspace / "junit.xml"
-    allure_dir.mkdir(parents=True, exist_ok=True)
-
+    allure = Path(engine.get("allure_bin") or settings().ALLURE_BIN)
+    base_url = engine.get("base_url", "")
     # 把被测系统配置注入子进程环境（让 conftest 能登录）
     env = dict(os.environ)
     if engine.get("base_url"):
@@ -94,11 +95,14 @@ def run_pytest(engine: dict, module: str, run_workspace: Path) -> dict:
     if engine.get("password"):
         env["SA_PASSWORD"] = engine["password"]
 
-    # 生成目录与执行目标保持一致：由被测系统画像决定（gen_dir 显式配置优先，
-    # 未填则按 tests/api 子目录推断），该子目录 conftest 提供 api_client/ctx/cleanup_registry 等 fixture
+    # 生成目录与执行目标保持一致：由被测系统画像决定（gen_dir 显式配置优先，未填按 tests/api 子目录推断），
+    # 该子目录 conftest 提供 api_client/ctx/cleanup_registry 等 fixture，其他目录 fixture not found。
     profile = collect_system_profile(engine, module)
-    api_base = profile.api_base
-    target = api_base / module
+    resolved = resolve_target_file(engine, module, target_file)
+    if resolved is not None:
+        target = resolved                # 用户指定了目标文件：只跑该文件
+    else:
+        target = profile.api_base / module   # 默认：跑整个模块目录（含多个脚本，历史行为不变）
     cmd = [python, "-m", "pytest", str(target)]
     # 主业务 marker 按画像推断（smartadmin / 新系统自定义 marker）；无则不按 marker 过滤
     if profile.marker:

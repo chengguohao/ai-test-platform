@@ -21,13 +21,34 @@
           <el-button :loading="envChecking" @click="envCheck">
             <el-icon style="margin-right: 4px"><Monitor /></el-icon>环境自检
           </el-button>
-          <el-button type="primary" :loading="executing" @click="execRun">
-            <el-icon style="margin-right: 4px"><VideoPlay /></el-icon>执行测试
-          </el-button>
+          <el-tooltip :disabled="autoGenDone" placement="top" :content="'需「自动化生成」阶段已完成（生成自动化用例）后，才能执行测试'">
+            <el-button type="primary" :loading="executing" :disabled="!autoGenDone" @click="execRun">
+              <el-icon style="margin-right: 4px"><VideoPlay /></el-icon>执行测试
+            </el-button>
+          </el-tooltip>
           <el-button @click="openAllure">
             <el-icon style="margin-right: 4px"><Link /></el-icon>打开 Allure 报告
           </el-button>
         </div>
+        <!-- 目标脚本文件：留空=跑整个模块目录（默认）；填写=只执行该文件（自动化生成时指定的目标会自动带过来） -->
+        <el-input
+          v-model="execTargetFile"
+          class="target-file-input mt8"
+          placeholder="目标脚本文件（留空=执行模块目录下全部脚本）"
+          clearable
+        >
+          <template #prepend>目标文件</template>
+        </el-input>
+        <div class="form-hint" style="margin-top:4px; color:#909399">
+          默认执行整个模块目录下的全部脚本；填写目标文件后只执行该文件（自动化生成页填过的目标文件会自动带到这里）。
+        </div>
+        <el-alert
+          v-if="!autoGenDone"
+          type="info"
+          :closable="false"
+          class="mt8"
+          title="「执行测试」需在「自动化生成」阶段已完成之后才能使用：请先完成自动化用例生成。"
+        />
 
         <template v-if="envItems.length">
           <div class="block-title">环境自检结果</div>
@@ -128,6 +149,27 @@ const envChecking = ref(false)
 const executing = ref(false)
 const history = ref([])
 const detail = ref(null)
+/* 目标脚本文件（执行用）：留空=跑整个模块目录；填写=只跑该文件。
+   自动化生成页指定的目标文件已固化在 auto_gen 阶段 meta，打开本页时自动带过来。 */
+const execTargetFile = ref('')
+
+/* 执行测试前置门槛：自动化生成阶段须已完成（success），否则禁用「执行测试」按钮 */
+const autoGenDone = ref(false)
+
+async function loadRunStages() {
+  if (!selectedRunId.value) return
+  try {
+    const sts = await workflowApi.stages(selectedRunId.value)
+    autoGenDone.value = sts.find((s) => s.stage_type === 'auto_gen')?.status === 'success'
+    // 回显目标文件：自动化生成页指定后本页默认沿用同一文件（仅当用户没手动改过才接管）
+    if (!execTargetFile.value) {
+      execTargetFile.value = sts.find((s) => s.stage_type === 'auto_gen')?.meta?.target_file || ''
+    }
+  } catch {
+    /* 拉取失败保持禁用（fail-safe） */
+    autoGenDone.value = false
+  }
+}
 
 const run = computed(() => runs.value.find((r) => r.id === selectedRunId.value))
 const allureUrl = computed(() =>
@@ -156,11 +198,13 @@ async function loadRuns() {
 async function onSelectRun() {
   envItems.value = []
   detail.value = null
+  execTargetFile.value = ''   // 切换实例后目标文件按新实例的 auto_gen meta 重新回显
   await loadHistory()
 }
 
 async function loadHistory() {
   if (!selectedRunId.value) return
+  await loadRunStages()   // 同步「执行测试」门槛：自动化生成阶段必须已完成
   history.value = await execApi.runs(selectedRunId.value)
   // 自动回显最新一次执行详情（关掉页面再进不丢内容）
   if (history.value.length && !detail.value) {
@@ -199,7 +243,12 @@ async function execRun() {
     } catch {
       /* 取不到 module 时使用默认值 */
     }
-    const r = await execApi.run({ run_id: selectedRunId.value, module, project_id: project.value.id })
+    const r = await execApi.run({
+      run_id: selectedRunId.value,
+      module,
+      project_id: project.value.id,
+      target_file: execTargetFile.value.trim()
+    })
     const first = r.result || r
     if (first.status === 'running' && first.message && first.message.includes('轮询')) {
       // 后台执行模式：轮询直到结束
@@ -252,6 +301,10 @@ onMounted(async () => {
 
 .mt8 {
   margin-top: 8px;
+}
+
+.target-file-input {
+  max-width: 460px;
 }
 
 .summary-stats {

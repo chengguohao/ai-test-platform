@@ -131,8 +131,11 @@ def run_fix(db: Session, run_id: int, execution_id: int,
                    f"重新生成必须遵循的修改指令：\n{regen_instructions}\n"
                    f"pytest 失败日志（末段）：\n{(rec.error_log or '')[-6000:]}")
     engine = (p.engine_config or {}) if p else {}
+    # 修复重生成必须沿用用户指定的目标文件（meta 固化过），否则修复会写回默认文件造成双文件漂移
+    target_file = (st_auto.meta or {}).get("target_file", "") if st_auto else ""
     out = auto_gen_svc.generate(db, run_id, engine, project,
-                                llm_config=llm_config, fix_context=fix_context)
+                                llm_config=llm_config, fix_context=fix_context,
+                                target_file=target_file)
 
     # 7. 重生成成功：阶段状态恢复
     if st_auto:
@@ -149,7 +152,8 @@ def run_fix(db: Session, run_id: int, execution_id: int,
         _step("脚本已重新生成，自动提交执行测试验证修复效果…")
         from app.services import auto_run  # 延迟导入避免循环
         module = out.get("module") or "module"
-        eid = auto_run.submit_execution(db, p, run_id, module)
+        eid = auto_run.submit_execution(db, p, run_id, module,
+                                        target_file=(st_auto.meta or {}).get("target_file", ""))
         er = auto_run.wait_execution(db, eid)
         exec_status = er.status if er else "timeout"
         s = (er.summary or {}) if er else {}

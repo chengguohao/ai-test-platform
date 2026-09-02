@@ -36,9 +36,11 @@ class RunIn(BaseModel):
     run_id: int
     module: str
     project_id: int
+    target_file: str = ""   # 用户指定目标脚本文件（相对 pytest 项目根）；空=跑整个模块目录
 
 
-def _execute_async(execution_id: int, project_id: int, run_id: int, module: str) -> None:
+def _execute_async(execution_id: int, project_id: int, run_id: int, module: str,
+                   target_file: str = "") -> None:
     """后台线程：跑 pytest + Allure，把结果回写到执行记录（独立 DB 会话）。"""
     db = SessionLocal()
     log_path = None
@@ -58,13 +60,15 @@ def _execute_async(execution_id: int, project_id: int, run_id: int, module: str)
             log_path = storage.append_log(p.name, run_id, "execute", f"[{ts}] {line}\n")
             task_progress.report(pkey, line)   # 同步喂给前端轮询
 
-        _log(f"===== 执行开始 #{execution_id}（module={module}, 工作区={ws}）=====")
+        _log(f"===== 执行开始 #{execution_id}（module={module}, "
+             + (f"目标文件={target_file}, " if target_file else "")
+             + f"工作区={ws}）=====")
         env = rec.env_check or {}
         if env.get("items"):
             bad = [i for i in env["items"] if not i.get("ok")]
             _log(f"[环境自检] {'全部通过' if not bad else '存在问题: ' + '; '.join(i.get('detail', '') for i in bad)}")
         try:
-            result = executor.run_pytest(engine, module, ws)
+            result = executor.run_pytest(engine, module, ws, target_file=target_file)
             _log(f"[pytest] 状态={result.get('status')}，摘要={result.get('summary')}")
             if result.get("error_log"):
                 _log("[pytest 输出（末尾 4000 字）]\n" + result["error_log"][-4000:])
@@ -153,7 +157,7 @@ def run(body: RunIn, db: Session = Depends(get_db)):
     mark_stage_status(db, body.run_id, "execute", "running")
     threading.Thread(
         target=_execute_async,
-        args=(rec.id, body.project_id, body.run_id, body.module),
+        args=(rec.id, body.project_id, body.run_id, body.module, body.target_file),
         daemon=True, name=f"pytest-exec-{rec.id}",
     ).start()
     return {"execution_id": rec.id, "result": {"status": "running",

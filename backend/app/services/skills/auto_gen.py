@@ -21,11 +21,16 @@ _MARKERS_LIST = "_MARKERS_LIST_"
 _BF_RULES = "_BF_RULES_"
 _ROLE_SECTION = "_ROLE_SECTION_"
 _RULES_TAIL = "_RULES_TAIL_"
+_API_FLOW = "_API_FLOW_"
 
 _SYSTEM_TEMPLATE = """你是资深接口自动化测试工程师，负责把"已评审通过的手工用例 + OpenAPI 接口文档"转成「接口自动化用例声明 JSON」。
 你只输出**数据**（声明），平台会用确定性模板把它渲染成 pytest 脚本 —— 因此你**绝不输出任何 Python 代码**，只按契约填 JSON。
 硬性契约：
-1. 每个 step 的 name 必须以来源用例的 TC-id 开头（如 name="TC-OA_NOTICE-C01-创建公告-正常成功"），禁止自造编号或丢 TC- 前缀；
+0. **忠实输入，禁止幻觉**：module 必须原样使用输入里的 module 字段，禁止改名/自造（如输入是 enterprise 就必须输出 enterprise）；
+   输入的 case_count / required_tc_ids 明确给出了必须覆盖的用例总数与 TC 编号清单 ——
+   steps 数组长度必须 ≥ case_count，required_tc_ids 中的**每一个编号**都必须至少出现在一个 step 的 name 里，一条不落；
+   禁止自造输入中不存在的 TC 编号或业务场景（不得模仿示例里的业务，一切以输入 case_tree + api_doc 为准）；
+1. 每个 step 的 name 必须以来源用例的 TC-id 开头（编号取自输入 case_tree 的对应用例），禁止自造编号或丢 TC- 前缀；
 2. 判定正例/反例：用例语义为"期望失败/报错"（名称含 不存在/非法/异常/失败/越权/为空/无权限/不可见/未登录/过期 等）→ 反例，
    必须用 biz_fail 声明业务码 key（**只能取 codes_keys 里列出的值**，反例退化为仅校验 /msg 存在=白测）或断言表达失败；
    只有"期望成功"的正例才允许不写断言（渲染器按成功信封自动校验）；
@@ -37,12 +42,35 @@ _BF_RULES_
 4. 非 exists 的 op 必须带 expected；exists 可省略 expected（渲染器自动补 True）；
 5. 字段名/路径/枚举只能来自接口文档，禁止自造；资源 ID 禁止写死——创建类接口返回 data=null 时，
    必须用一个"分页反查"step + save 把真实 ID 存入上下文，后续 step 用 ${xxx_id} 引用；
-6. 创建类用例（创建了真实资源）声明 cleanup={"id_var": "xxx_id", "delete_path": "/xxx/delete/{id}"}，
-   渲染器自动生成 register_delete 防污染；依赖该 ID 的"删除"step 应放在 steps 靠后；
+6. **必须先分析「功能嵌套与数据依赖」，再按「依赖拓扑 + 业务生命周期」声明 steps 顺序**
+   （渲染器会按 ${var} 引用做确定性拓扑重排兜底，但声明顺序请保持清晰语义）：
+   - 结构分析：根据 api_doc 的路径组织识别实体嵌套（如 /oa/enterprise/employee/* 的员工功能挂在企业之下），
+     以及步骤间字段引用（body/path 中使用前面步骤 save 出的 ${xxx_id}）；
+   - 生命周期主序「增 → 查(save id) → 改 → 删」，**子实体整体插在父实体增查改之后、父实体删除之前**，典型嵌套流程：
+     企业(增 → 查→save 企业id → 改) → 员工(增[body 引用 ${企业id}，保证员工绑定在企业下] → 查→save 员工id → 改 → 删[员工id]) → 企业(删[企业id])；
+   - 引用前面步骤 save 变量的 step，必须声明在其后（渲染器强制校验）；
+     **创建接口的正例 step 必须带 cleanup**（id_var=反查 save 出的变量名，delete_path=对应删除接口路径；
+     漏带则执行后数据不清理、污染被测库），删除类步骤放末尾并按「先子后父」顺序（员工删先于企业删）；
+   - 跨模块（本生成模块之外被测系统的接口/数据）的字段依赖无法用 ${var} 串联（各自独立脚本），
+     必须在 strategy 里注明前置数据准备方式（如先调用前置接口 / 写定已存在数据的 id），禁止假装能串；
 7. 多角色（admin/employee 等不同身份访问同一资源）→ 每个 step 声明 role（anonymous=未登录）；
    单角色 → 所有 step 都不写 role。role 只能取 available_roles 中列出的值或 anonymous；
+   **模块级 pytestmark_roles 只许填报配置的账号角色键（available_roles 列出的）；
+   绝不允许 anonymous/not_login/未登录** —— 未登录只能声明在单个 step 的 role 里，
+   声明到模块级会污染整模块（渲染器会过滤，但请直接不要写出来）；
 _MARKERS_LIST_
 8. 只输出一个 JSON 对象：把 3-5 条设计思路（为什么选这些用例/正反例/串联/清理策略）写在 strategy 字段，供测试人员核对。
+9. **接口文档数据链（api_flow，源头治理的主序）**：
+   - 输入里的 api_flow（如有）给出接口卡片人工确认的数据链：每个接口的 depends_on（前置接口）与
+     order_recommended（推荐执行顺序）——**steps 必须按 order_recommended 的顺序声明**（同接口多个 step 保持正反例内部序），
+     子实体（如 employee/* 挂企业下）整体位于父实体（enterprise/*）增查改之后、父实体删除之前；
+   - 步骤 body/path 需要"上一接口给的 id"时，必须在该接口 order 靠前的位置一步"分页反查"step + save 产出 ${xxx_id}，
+     后续 step 一律 ${xxx_id} 引用（api_flow 的 field_sources 已给出字段来源路径，直接照抄即可）;
+   - **列表型 ID 入参**（如 employeeIdList，field_sources 标记 list=true）：来源同样指向响应元素 id
+     （list[].employeeId）；先一步"分页反查员工"save 单个 employee_id，再以 ['${employee_id}']（单元素数组）填充数组字段，
+     不要再写死 1001 之类的猜测值；禁止对数组字段传字符串；
+   - 无 api_flow 或 api_flow 未覆盖的接口：按前面规则 5/6（生命周期+数据依赖）自行推断。
+_API_FLOW_
 _RULES_TAIL_
 """
 
@@ -63,9 +91,11 @@ _ROLE_SECTION_CODE = """多角色说明：本工程检测到角色体系（role_
 单角色用例整组都不写 role。"""
 _ROLE_SECTION_NOCODES = "注：本工程未检测到角色体系，所有用例按单角色（不写 role）编写，禁止使用 role/anonymous。"
 
-USER = """请输出接口自动化用例声明 JSON（只输出一个 JSON 对象，不要输出任何 Python 代码或额外解释）：
+USER = """请输出接口自动化用例声明 JSON（只输出一个 JSON 对象，不要输出任何 Python 代码或额外解释）。
+注意：下方 JSON 仅示意**结构**，其中业务内容全部是占位 —— 实际的 module、TC 编号、接口路径、字段、业务码
+必须逐一取自本消息末尾「输入」里的 module / case_tree / api_doc，禁止照抄示例占位内容：
 {{
-  "module": "模块英文短名（小写下划线）",
+  "module": "（原样等于输入的 module）",
   "feature": "被测系统名 · 模块中文名",
   "story": "用例组名（如 L2 接口 / 跨角色权限与业务流）",
   "pytestmark_roles": ["涉及的角色键，如 admin"],
@@ -73,9 +103,9 @@ USER = """请输出接口自动化用例声明 JSON（只输出一个 JSON 对�
   "steps": [
     {{
       "role": "admin",
-      "name": "TC-XXX-C01-用例标题",
+      "name": "TC-<MODULE>-C01-用例标题（编号取自 case_tree 对应用例）",
       "method": "POST",
-      "path": "/oa/xxx/create",
+      "path": "/实际接口路径（取自 api_doc）",
       "body": {{"field": "value"}},
       "params": {{"pageNum": 1, "pageSize": 10}},
       "save": {{"/data/list[0]/xxxId": "xxx_id"}},
@@ -91,8 +121,8 @@ USER = """请输出接口自动化用例声明 JSON（只输出一个 JSON 对�
   ]
 }}
 
-输入（已评审用例 + 接口文档 + 被测系统契约，JSON 格式）：
-{{inputs}}"""
+输入（已评审用例 + 接口文档 + 被测系统契约，JSON 格式；case_tree 中的每条用例都必须转换，一条不落）：
+{inputs}"""
 
 
 def _spec_schema() -> dict:
@@ -159,6 +189,11 @@ def _validate(obj: dict) -> list[str]:
     roles = [s.get("role") for s in steps]
     if any(roles) and not all(roles):
         errs.append("steps 中一旦出现 role，所有 step 都必须声明 role（多角色/单角色二选一，不可混用）")
+    # 数据依赖：save 产出的变量 → 引用方（渲染器拓扑兜底的前置契约，提前暴露引用未声明变量）
+    import re as _re
+    producers: set[str] = set()
+    for s in steps:
+        producers.update(str(v) for v in (s.get("save") or {}).values())
     for s in steps:
         name = s.get("name", "")
         if not name.startswith(prefix):
@@ -168,6 +203,13 @@ def _validate(obj: dict) -> list[str]:
         seen.add(name)
         if not s.get("path"):
             errs.append(f"{name} 缺少 path")
+        # 引用未声明变量：渲染器会把该 ${var} 当普通文本渲染，运行期解析为空 → 白测风险
+        refs = set(_re.findall(r"\$\{(\w+)\}",
+                               "".join((s.get("path") or "",
+                                        str(s.get("body") or ""), str(s.get("params") or "")))))
+        for v in refs - producers:
+            errs.append(f"{name} 引用 ${{{v}}} 但没有任何 step 通过 save 产出该变量"
+                        f"（运行期会解析为空，请先加一个反查 save step 或写定值）")
         for a in s.get("assertions", []):
             if a.get("op") != "exists" and "expected" not in a:
                 errs.append(f"{name} 的断言 op={a.get('op')} 缺少 expected（仅 exists 可省略）")
@@ -188,6 +230,7 @@ def build_system_prompt(p: SystemProfile) -> str:
     else:
         s = s.replace(_ROLE_SECTION, _ROLE_SECTION_NOCODES)
     s = s.replace(_MARKERS_LIST, markers_list)
+    s = s.replace(_API_FLOW, "")   # api_flow 数据链经 USER 输入注入，无需占位
     s = s.replace(_SYS_NAME, p.system_name)
     if p.codes_import:
         s = s.replace(_BF_RULES, _BF_RULES_CODES)

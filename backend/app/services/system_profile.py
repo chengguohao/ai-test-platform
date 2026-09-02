@@ -61,17 +61,40 @@ class SystemProfile:
 
 def default_api_base(project_dir: Path) -> Path:
     """gen_dir 未填时的默认被测系统子目录：tests/api 下唯一子目录优先，否则回退 smartadmin。
-
-    多子目录并存且未显式配置时无解（无法猜用户意图），回退历史默认保持行为不变。
-    """
-    fallback = project_dir / "tests" / "api" / "smartadmin"
+    与 collect_system_profile 保持一致（单独抽出，供不依赖完整画像的早期判断使用）。"""
     api_root = project_dir / "tests" / "api"
-    if not api_root.is_dir():
-        return fallback
-    subs = [p for p in api_root.iterdir() if p.is_dir() and p.name != "__pycache__"]
-    if len(subs) == 1:
-        return subs[0]
-    return fallback
+    if api_root.is_dir():
+        subs = sorted(p for p in api_root.iterdir() if p.is_dir())
+        if len(subs) == 1:
+            return subs[0]
+    return project_dir / "tests" / "api" / "smartadmin"
+
+
+def resolve_target_file(engine: dict, module: str, target_file: str) -> Path | None:
+    """把用户填写的「目标脚本文件」解析为绝对路径（生成与执行共用同一规则）。
+
+    - 空 / 全空白            → 返回 None，调用方走默认（生成写 test_{module}.py；执行跑整个模块目录）
+    - 纯文件名（无路径分隔符）→ {api_base}/{module}/{文件名}（与被测系统子目录 conftest 保持一致）
+    - 含路径分隔符或以 . 开头 → 相对 pytest 项目根解析（支持 tests/api/xxx/test_yy.py 这类路径）
+
+    强制校验：必须以 .py 结尾；解析后必须落在 pytest 项目目录内（防目录穿越）。
+    非法输入抛 ValueError，接口层转为 422 提示。
+    """
+    raw = (target_file or "").strip().replace("\\", "/")
+    if not raw:
+        return None
+    if not raw.endswith(".py"):
+        raise ValueError(f"目标文件必须以 .py 结尾：{raw!r}")
+    project_dir = Path(engine.get("pytest_project_dir") or settings().PYTEST_PROJECT_DIR)
+    if "/" in raw or raw.startswith("."):
+        path = project_dir / raw
+    else:
+        api_base = collect_system_profile(engine).api_base
+        path = api_base / module / raw
+    resolved = path.resolve()
+    if not resolved.is_relative_to(project_dir.resolve()):
+        raise ValueError(f"目标文件必须在 pytest 项目目录内：{raw!r}")
+    return resolved
 
 
 def _conftest_chain(target_dir: Path, project_dir: Path) -> list[Path]:

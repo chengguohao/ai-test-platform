@@ -50,6 +50,18 @@ async def upload_artifact(
             complete_stage_by_type(db, run_id, "api_doc")
         except HTTPException:
             pass
+        # 新文档覆盖旧链：作废之前保存/分析的数据链（确认版+候选），
+        # 卡片回到「待分析」（保存工件场景：保存后未分析 → 待分析 → 分析 → 候选待确认 → 确认 → 已完成）
+        st = (db.query(models.StageState)
+              .filter(models.StageState.run_id == run_id, models.StageState.stage_type == "api_doc")
+              .order_by(models.StageState.id.desc()).first())
+        if st:
+            m = dict(st.meta or {})
+            m.pop("data_flow", None)
+            m.pop("data_flow_candidates", None)
+            m["data_flow_state"] = "none"
+            st.meta = m
+            db.commit()
     # 需求文档勾选「包含图片」-> 后台线程启动多模态规范化（与 auto_generate 先例一致）
     # 只处理 docx 内嵌图；接口立即返回，进度见 req_vision:{run_id}
     if type == "requirement" and has_images.strip().lower() == "true":

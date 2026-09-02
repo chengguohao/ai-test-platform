@@ -73,6 +73,7 @@
         :project="project"
         :run="run"
         :stage="selectedStage"
+        :stages="stages"
         @changed="refresh"
       />
     </div>
@@ -311,8 +312,12 @@ async function loadStages() {
   loading.value = true
   try {
     stages.value = await workflowApi.stages(selectedRunId.value)
-    // 流程全部完成 → 自动拉取 AI 执行总结（后端有缓存，不会重复调模型）
-    if (run.value?.status === 'success') genRunSummary(false)
+    // 流程真正全部完成（成功/已跳过）且实例状态为已完成 → 才自动拉取 AI 执行总结。
+    // 不能只看 run.status：重新生成用例后 case_gen 阶段回到 pending_review，
+    // 但 run.status 仍可能保留 success，若按它触发会发现后端 422「流程尚未全部完成」，
+    // 每次刷新/切页都弹错误提示（AI 总结未完成提示一直被弹）。
+    const allDone = stages.value.every((s) => s.status === 'success' || s.status === 'skipped')
+    if (run.value?.status === 'success' && allDone) genRunSummary(false)
   } finally {
     loading.value = false
   }
